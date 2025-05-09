@@ -129,6 +129,7 @@ class RouteCipher:
     def analyze_route_pattern(self, text, width, height):
         """
         Анализирует текст и определяет оптимальный тип маршрута (спираль или змейка).
+        Улучшенная версия с более точным определением.
 
         Параметры:
         - text: текст для анализа
@@ -140,11 +141,11 @@ class RouteCipher:
         """
         # Защита от некорректных параметров
         if not text or width <= 0 or height <= 0:
-            return "спираль"
+            return "спираль"  # По умолчанию, если параметры некорректны
 
         # Необходимый минимум для анализа
         if len(text) < width * 2:
-            return "спираль"
+            return "спираль"  # По умолчанию для очень коротких текстов
 
         # Генерируем маршруты
         spiral_route = self.spiral_route(width, height)
@@ -168,399 +169,49 @@ class RouteCipher:
                 if 0 <= i < height and 0 <= j < width:
                     snake_matrix[i][j] = char
 
-        # Определяем опорные лингвистические маркеры для русского языка
-        punctuation = '.,!?;:()[]{}«»—–-…'
-        russian_prepositions = {'в', 'на', 'с', 'к', 'у', 'от', 'из', 'о', 'об', 'по', 'за', 'под', 'над', 'при', 'для',
-                                'через', 'перед', 'около'}
-        russian_conjunctions = {'и', 'а', 'но', 'или', 'что', 'чтобы', 'если', 'когда', 'как', 'где', 'который',
-                                'потому', 'поэтому', 'так', 'либо', 'ни', 'то'}
-
-        # ==================== ОЦЕНКА "ЗМЕЙКИ" ====================
-        # Общий счёт: максимум 100 баллов
-        snake_score = 0
-
-        # 1. Лингвистическая целостность строк (40 баллов)
-        # В змейке мы ожидаем, что строки имеют лингвистический смысл
-        row_score = 0
-
-        for i in range(height):
-            if i >= len(snake_matrix):
-                continue
-
-            row = ''.join(snake_matrix[i])
-
-            # А. Проверка на наличие слов в строке
-            words = row.split()
-            if len(words) >= 1:
-                row_score += min(3, len(words) * 0.3)  # Бонус за количество слов
-
-                # Учет длины слов (слишком короткие или длинные слова менее вероятны)
-                avg_word_len = sum(len(word) for word in words) / max(1, len(words))
-                if 3 <= avg_word_len <= 8:  # Оптимальная длина слова в русском
-                    row_score += 1
-
-                # Проверяем целостность слов (не разорваны ли они по краям)
-                if (i % 2 == 0 and row.strip() and row.strip()[-1].isalpha() and
-                        i + 1 < height and i + 1 < len(snake_matrix) and snake_matrix[i + 1][0] != ' '):
-                    row_score -= 0.5  # Штраф за разорванное слово
-
-            # В. Анализ предложений
-            if '.' in row or '!' in row or '?' in row:
-                sent_count = sum(1 for c in row if c in '.!?')
-                row_score += sent_count * 1.5  # Бонус за законченные предложения
-
-            # Г. Проверка предлогов и союзов в начале слов (очень характерно для русского языка)
-            row_words = row.lower().split()
-            for word in row_words:
-                if word in russian_prepositions or word in russian_conjunctions:
-                    row_score += 0.8
-
-        # Нормализуем оценку строк (до 40 баллов)
-        normalized_row_score = min(40, row_score * 40 / max(3, height * 3))
-        snake_score += normalized_row_score
-
-        # 2. Структурно-лингвистический анализ (30 баллов)
-        # В змейке мы ожидаем определенную структуру текста
-        structure_score = 0
-
-        # А. Анализ чередования предлогов и других частей речи
-        common_particles = ['и', 'а', 'в', 'с', 'на', 'по', 'к', 'о', 'от', 'из', 'у', 'но', 'или', 'что', 'как']
-        particle_distribution = 0
-
-        for i in range(height):
-            if i >= len(snake_matrix):
-                continue
-
-            row = ''.join(snake_matrix[i]).lower()
-            # Ищем предлоги и союзы, которые обычно идут в определенных местах
-            for particle in common_particles:
-                particle_with_spaces = f" {particle} "
-                if particle_with_spaces in row:
-                    particle_distribution += 1
-
-        # Нормализуем распределение предлогов
-        structure_score += min(15, particle_distribution * 15 / max(3, height * 2))
-
-        # Б. Анализ распределения пробелов и пунктуации
-        space_distribution = []
-        punct_distribution = []
-
-        for i in range(height):
-            if i >= len(snake_matrix) or not ''.join(snake_matrix[i]).strip():
-                continue
-
-            row = ''.join(snake_matrix[i])
-            space_count = row.count(' ')
-            punct_count = sum(1 for c in row if c in punctuation)
-
-            if len(row) > 0:  # Защита от деления на ноль
-                space_ratio = space_count / len(row)
-                punct_ratio = punct_count / len(row)
-
-                space_distribution.append(space_ratio)
-                punct_distribution.append(punct_ratio)
-
-        # Проверяем однородность распределения пробелов и пунктуации между строками
-        if space_distribution and len(space_distribution) > 1:
-            # Вычисляем стандартное отклонение - малые значения означают однородность
-            space_mean = sum(space_distribution) / len(space_distribution)
-            space_std = (sum((x - space_mean) ** 2 for x in space_distribution) / len(space_distribution)) ** 0.5
-
-            # Для змейки характерно равномерное распределение пробелов
-            structure_score += 15 * (1 - min(1, space_std * 10))  # До 15 баллов
-
-        # Общая оценка структуры
-        snake_score += structure_score
-
-        # 3. Статистический анализ (30 баллов)
-        # Проверяем статистические параметры текста
-        stat_score = 0
-
-        # А. Распределение частот букв по строкам
-        # Для змейки ожидаются схожие распределения в разных строках
-        letter_distributions = []
-
-        for i in range(min(height, len(snake_matrix))):
-            row = ''.join(c for c in snake_matrix[i] if c.isalpha()).lower()
-            if not row:
-                continue
-
-            freq = {}
-            for c in row:
-                freq[c] = freq.get(c, 0) + 1
-
-            # Нормализуем частоты
-            for c in freq:
-                freq[c] /= len(row)
-
-            letter_distributions.append(freq)
-
-        # Сравниваем распределения между соседними строками
-        if len(letter_distributions) >= 2:
-            similarity_sum = 0
-            comparisons = 0
-
-            for i in range(len(letter_distributions) - 1):
-                dist1 = letter_distributions[i]
-                dist2 = letter_distributions[i + 1]
-
-                # Вычисляем метрику сходства (чем ближе к 1, тем более похожи)
-                common_chars = set(dist1.keys()) & set(dist2.keys())
-                if common_chars:
-                    similarity = sum(min(dist1.get(c, 0), dist2.get(c, 0)) for c in common_chars)
-                    similarity_sum += similarity
-                    comparisons += 1
-
-            if comparisons > 0:
-                avg_similarity = similarity_sum / comparisons
-                stat_score += 15 * avg_similarity  # До 15 баллов
-
-        # Б. Анализ биграмм
-        # В змейке часто встречаются прерванные биграммы на границах строк
-        common_bigrams = {'то', 'но', 'на', 'по', 'ко', 'от', 'за', 'во', 'со', 'до', 'ст', 'ен', 'ов'}
-        broken_bigrams = 0
-
-        for i in range(height - 1):
-            if i >= len(snake_matrix) or i + 1 >= len(snake_matrix):
-                continue
-
-            row1 = ''.join(snake_matrix[i])
-            row2 = ''.join(snake_matrix[i + 1])
-
-            if not row1 or not row2:
-                continue
-
-            # Проверяем, есть ли "разорванные" биграммы на границах строк
-            if i % 2 == 0 and row1.strip() and row2.strip():  # Четная строка, проверяем конец с началом следующей
-                last_char = row1.rstrip()[-1:].lower() if row1.strip() else ''
-                first_char = row2.lstrip()[:1].lower() if row2.strip() else ''
-                if last_char and first_char:
-                    potential_bigram = last_char + first_char
-                    if potential_bigram in common_bigrams:
-                        broken_bigrams += 1
-            elif i % 2 == 1 and row1.strip() and row2.strip():  # Нечетная строка, проверяем начало с концом предыдущей
-                first_char = row1.lstrip()[:1].lower() if row1.strip() else ''
-                last_char = row2.rstrip()[-1:].lower() if row2.strip() else ''
-                if first_char and last_char:
-                    potential_bigram = last_char + first_char
-                    if potential_bigram in common_bigrams:
-                        broken_bigrams += 1
-
-        # Для змейки характерно МАЛОЕ количество разорванных биграмм
-        stat_score += 15 * (1 - min(1, broken_bigrams / max(1, height - 1)))
-
-        # Общая статистика
-        snake_score += stat_score
-
-        # ==================== ОЦЕНКА "СПИРАЛИ" ====================
-        # Общий счёт: максимум 100 баллов
-        spiral_score = 0
-
-        # 1. Анализ периметра таблицы (35 баллов)
-        # В спиральном шифре текст начинается с периметра
-        perimeter_score = 0
-
-        try:
-            # Защита от некорректных размеров матрицы
-            if height <= 0 or width <= 0 or height > len(spiral_matrix) or width > len(spiral_matrix[0]):
-                raise ValueError("Некорректные размеры матрицы")
-
-            # Получаем периметр спиральной матрицы
-            top = ''.join(spiral_matrix[0][:width])
-            right = ''.join(spiral_matrix[i][width - 1] for i in range(1, min(height - 1, len(spiral_matrix))))
-            bottom = ''.join(
-                spiral_matrix[min(height - 1, len(spiral_matrix) - 1)][j] for j in range(width - 1, 0, -1) if
-                j < len(spiral_matrix[min(height - 1, len(spiral_matrix) - 1)]))
-            left = ''.join(spiral_matrix[i][0] for i in range(min(height - 1, len(spiral_matrix) - 1), 0, -1))
-
-            perimeter = top + right + bottom + left
-
-            # Проверяем, что периметр не пустой
-            if not perimeter.strip():
-                raise ValueError("Пустой периметр матрицы")
-
-            # A. Проверяем начало текста (обычно имеет определенные характеристики)
-            # Для первых символов текста типично:
-            # - Заглавная буква в начале
-            # - Отсутствие знаков препинания в начале
-            if perimeter and perimeter[0].isupper():
-                perimeter_score += 5
-            if perimeter and not perimeter[0] in punctuation:
-                perimeter_score += 3
-
-            # Б. Анализируем биграммы и триграммы в периметре
-            common_bigrams_set = {'то', 'но', 'на', 'по', 'ко', 'от', 'за', 'во', 'со', 'до', 'ст', 'ен', 'ов', 'ра',
-                                  'ол', 'пр'}
-            common_trigrams_set = {'что', 'как', 'для', 'при', 'это', 'его', 'она', 'они', 'все', 'так'}
-
-            bigram_count = 0
-            for i in range(len(perimeter) - 1):
-                bigram = perimeter[i:i + 2].lower()
-                if bigram in common_bigrams_set:
-                    bigram_count += 1
-
-            trigram_count = 0
-            for i in range(len(perimeter) - 2):
-                trigram = perimeter[i:i + 3].lower()
-                if trigram in common_trigrams_set:
-                    trigram_count += 1
-
-            # Нормализуем счет n-грамм (до 15 баллов)
-            norm_factor = max(1, len(perimeter) / 10)
-            perimeter_score += min(15, (bigram_count + trigram_count * 2) * 15 / norm_factor)
-
-            # В. Анализируем пунктуацию и целостность предложений в периметре
-            sent_count = sum(1 for c in perimeter if c in '.!?')
-            space_after_punct = sum(
-                1 for i in range(len(perimeter) - 1) if perimeter[i] in '.!?,' and perimeter[i + 1] == ' ')
-
-            perimeter_score += min(12, (sent_count + space_after_punct) * 12 / max(1, len(perimeter) / 20))
-        except Exception as e:
-            # Игнорируем ошибки при анализе периметра
-            pass
-
-        # Общий счет для периметра (максимум 35)
-        spiral_score += min(35, perimeter_score)
-
-        # 2. Анализ связности соседних символов в спиральном маршруте (35 баллов)
-        coherence_score = 0
-
-        # Проверяем лингвистическую связность между соседними символами
-        vowels = 'аеёиоуыэюя'
-        consonants = 'бвгджзйклмнпрстфхцчшщ'
-
-        coherence_points = 0
-
-        # Улучшенный анализ связности для спирального маршрута
-        for i in range(min(len(text), len(spiral_route) - 1)):
-            if i + 1 >= len(text):
-                break
-
-            c1 = text[i].lower()
-            c2 = text[i + 1].lower()
-
-            # Проверяем типичные сочетания для русского языка
-            # Гласная + согласная
-            if (c1 in vowels and c2 in consonants) or (c1 in consonants and c2 in vowels):
-                coherence_points += 1
-
-            # Конец слова (буква + пробел)
-            elif c1.isalpha() and c2 == ' ':
-                coherence_points += 1.5
-
-            # Начало слова (пробел + буква)
-            elif c1 == ' ' and c2.isalpha():
-                coherence_points += 1.5
-
-            # Пунктуация + пробел
-            elif c1 in punctuation and c2 == ' ':
-                coherence_points += 2
-
-            # Пробел + заглавная буква (начало предложения)
-            elif c1 == ' ' and c2.isupper():
-                coherence_points += 2.5
-
-            # Типичные сочетания букв в русском языке
-            elif c1 + c2 in {'ст', 'но', 'то', 'на', 'ен', 'ов', 'ни', 'ра', 'во', 'ко', 'ал', 'ли', 'ре', 'по', 'не',
-                             'ет'}:
-                coherence_points += 1.5
-
-            # Штраф за нетипичные сочетания
-            elif c1.isalpha() and c2.isalpha() and c1 in consonants and c2 in consonants:
-                if c1 + c2 not in {'ст', 'пр', 'тр', 'дн', 'кл', 'сн', 'гр', 'вн', 'нт', 'рн', 'бр', 'др', 'вр', 'зн',
-                                   'мн'}:
-                    coherence_points -= 0.5
-
-        # Нормализуем оценку связности (до 35 баллов)
-        coherence_score = min(35, coherence_points * 35 / max(1, len(text) / 5))
-        spiral_score += coherence_score
-
-        # 3. Анализ центральной части и специфических признаков спирального шифра (30 баллов)
-        pattern_score = 0
-
-        try:
-            # А. Анализ центральной области спиральной матрицы
-            center_x, center_y = height // 2, width // 2
-            center_region = []
-
-            # Собираем центральную область (3x3 или меньше)
-            for i in range(max(0, center_x - 1), min(height, center_x + 2)):
-                for j in range(max(0, center_y - 1), min(width, center_y + 2)):
-                    if i < len(spiral_matrix) and j < len(spiral_matrix[i]):
-                        center_region.append(spiral_matrix[i][j])
-
-            center_text = ''.join(center_region).strip()
-
-            # Б. Проверяем специфические характеристики центра спирали
-            if center_text:
-                # Центр часто содержит конец текста - проверяем на признаки конца
-                if any(center_text.endswith(p) for p in '.!?'):
-                    pattern_score += 8
-
-                # Проверяем на наличие коротких слов (они часто оказываются в центре)
-                center_words = [w for w in center_text.split() if w]
-                if center_words and all(len(w) <= 3 for w in center_words):
-                    pattern_score += 7
-
-                # Проверяем на служебные слова
-                common_small_words = {'и', 'а', 'но', 'или', 'же', 'то', 'в', 'на', 'с', 'от', 'к', 'у', 'о', 'не',
-                                      'за'}
-                if any(word.lower() in common_small_words for word in center_words):
-                    pattern_score += 7
-
-            # В. Проверяем размерность таблицы - нечетные размеры лучше для спирали
-            if width % 2 == 1 and height % 2 == 1:
-                pattern_score += 8
-
-            # Г. Проверка на ширину 11 - особый случай, часто используемый со спиралью
-            if width == 11:
-                pattern_score += 10
-
-        except Exception as e:
-            # Игнорируем ошибки при анализе центра
-            pass
-
-        # Добавляем оценку специфических признаков (максимум 30)
-        spiral_score += min(30, pattern_score)
-
-        # Выводим результаты для отладки
-        # print(f"Оценка змейки: {snake_score:.1f} (строки: {normalized_row_score:.1f}, структура: {structure_score:.1f}, статистика: {stat_score:.1f})")
-        # print(f"Оценка спирали: {spiral_score:.1f} (периметр: {min(35, perimeter_score):.1f}, связность: {coherence_score:.1f}, паттерны: {min(30, pattern_score):.1f})")
-
-        # Применяем дополнительные корректировки на основе эмпирического опыта
-        original_snake_score = snake_score
-        original_spiral_score = spiral_score
-
-        # 1. Корректировка для ширины 11 (исторически предпочтительна для спирали)
-        if width == 11:
-            spiral_score *= 1.15
-
-        # 2. Корректировка для больших квадратных таблиц (предпочтительна спираль)
-        if width == height and width >= 8:
+        # Формируем тексты для каждого типа маршрута, читая матрицы по строкам
+        spiral_text = ''.join(''.join(row) for row in spiral_matrix)
+        snake_text = ''.join(''.join(row) for row in snake_matrix)
+
+        # Оцениваем качество полученных текстов
+        spiral_quality = self.assess_decryption_quality(spiral_text)
+        snake_quality = self.assess_decryption_quality(snake_text)
+        
+        # Дополнительная оценка лингвистических параметров
+        spiral_linguistic = self.secondary_quality_check(spiral_text)
+        snake_linguistic = self.secondary_quality_check(snake_text)
+        
+        # Вычисляем общую оценку с весами
+        spiral_score = spiral_quality * 0.7 + spiral_linguistic * 0.3
+        snake_score = snake_quality * 0.7 + snake_linguistic * 0.3
+        
+        # Применяем корректировки на основе формы таблицы
+        
+        # 1. Для квадратных таблиц предпочтительнее спираль
+        if abs(width - height) <= 2:
             spiral_score *= 1.1
-
-        # 3. Корректировка для узких таблиц (предпочтительна змейка)
+            
+        # 2. Для очень широких таблиц предпочтительнее змейка
+        if width > height * 2:
+            snake_score *= 1.15
+            
+        # 3. Для очень высоких таблиц тоже предпочтительнее змейка
         if height > width * 2:
             snake_score *= 1.1
-
-        # 4. Для таблиц с очень малой высотой (1-2 строки) змейка обычно предпочтительнее
-        if height <= 2 and width > 5:
-            snake_score *= 1.2
-
-        # 5. Для таблиц с большой разницей между шириной и высотой
-        if width > height * 3:
-            snake_score *= 1.15
-
-        # 6. Проверка на специальный случай: если разница между оценками до корректировки была небольшой
-        if abs(original_snake_score - original_spiral_score) < 5:
-            # Делаем выбор на основе формы таблицы
-            if width > height * 1.5:
-                snake_score = max(snake_score, spiral_score * 1.1)  # Для широких таблиц предпочитаем змейку
-            elif width == height or abs(width - height) <= 2:
-                spiral_score = max(spiral_score,
-                                   snake_score * 1.1)  # Для квадратных/близких к квадрату предпочитаем спираль
-
-        # Принимаем решение о типе маршрута
+            
+        # 4. Для таблиц шириной 11 исторически предпочтительнее спираль
+        if width == 11:
+            spiral_score *= 1.15
+            
+        # 5. Для маленьких таблиц (до 5x5) предпочтительнее спираль
+        if width <= 5 and height <= 5:
+            spiral_score *= 1.1
+            
+        # Для отладки можно раскомментировать:
+        # print(f"Спираль: {spiral_score:.2f} (качество: {spiral_quality:.2f}, лингв: {spiral_linguistic:.2f})")
+        # print(f"Змейка: {snake_score:.2f} (качество: {snake_quality:.2f}, лингв: {snake_linguistic:.2f})")
+        
+        # Возвращаем тип маршрута с наивысшей оценкой
         if snake_score > spiral_score:
             return "змейка"
         else:
@@ -1097,11 +748,6 @@ class RouteCipher:
             import traceback
             traceback.print_exc()
 
-    def remove_fillers(self, text, filler='Х'):
-        """Удаляет символы-заполнители из конца расшифрованного текста"""
-        # Удаляем символы-заполнители с конца текста
-        return text.rstrip(filler)
-
     def decrypt(self, text, width=None, height=None, route_type=None, filler='Х'):
         """
         Дешифрует текст с использованием указанного типа маршрута.
@@ -1145,7 +791,7 @@ class RouteCipher:
             decrypted += ''.join(row)
 
         # Удаляем символы-заполнители
-        decrypted = self.remove_fillers(decrypted, filler)
+        decrypted = decrypted.rstrip(filler)
 
         # Оцениваем качество дешифрования
         quality = self.assess_decryption_quality(decrypted)
@@ -1408,26 +1054,18 @@ class RouteGUI:
         width_entry = ttk.Entry(width_frame, textvariable=self.decrypt_width_var, width=5)
         width_entry.pack(side=tk.LEFT, padx=5)
 
-        # Высота таблицы (только для отображения)
-        height_frame = ttk.Frame(params_frame)
-        height_frame.pack(fill=tk.X, padx=5, pady=5)
-
-        ttk.Label(height_frame, text="Высота таблицы:").pack(side=tk.LEFT, padx=5)
-        self.decrypt_height_var = tk.StringVar(value="")
-        height_label = ttk.Label(height_frame, textvariable=self.decrypt_height_var, width=5)
-        height_label.pack(side=tk.LEFT, padx=5)
-        ttk.Label(height_frame, text="(вычисляется автоматически)").pack(side=tk.LEFT, padx=5)
-
-        # Тип маршрута
+        # Тип маршрута (для отображения результата криптоанализа)
         route_frame = ttk.Frame(params_frame)
         route_frame.pack(fill=tk.X, padx=5, pady=5)
 
         ttk.Label(route_frame, text="Тип маршрута:").pack(side=tk.LEFT, padx=5)
         self.decrypt_route_var = tk.StringVar(value="")
-        route_combo = ttk.Combobox(route_frame, textvariable=self.decrypt_route_var, values=["спираль", "змейка"], 
-                                   width=10)
-        route_combo.pack(side=tk.LEFT, padx=5)
-        ttk.Label(route_frame, text="(определяется автоматически, можно изменить вручную)").pack(side=tk.LEFT, padx=5)
+        route_label = ttk.Label(route_frame, textvariable=self.decrypt_route_var, width=10)
+        route_label.pack(side=tk.LEFT, padx=5)
+        ttk.Label(route_frame, text="(определяется автоматически)").pack(side=tk.LEFT, padx=5)
+
+        # Скрытые переменные для сохранения данных
+        self.decrypt_height_var = tk.StringVar(value="")
 
         # Кнопка дешифрования
         decrypt_btn = ttk.Button(self.decrypt_frame, text="Расшифровать", command=self.decrypt_text)
@@ -1514,31 +1152,60 @@ class RouteGUI:
                 return
 
             width = int(width_str)
+            height = (len(text) + width - 1) // width
             
             # Создаем объект шифра
             cipher = RouteCipher()
             
-            # Проверяем, был ли указан тип маршрута вручную
-            user_route_type = self.decrypt_route_var.get().strip()
+            # Определяем тип маршрута с помощью криптоанализа
+            route_type = cipher.analyze_route_pattern(text, width, height)
+            self.decrypt_route_var.set(route_type)
             
-            # Если тип маршрута не указан, определяем его с помощью криптоанализа
-            if not user_route_type:
-                route_type = cipher.analyze_route_pattern(text, width, (len(text) + width - 1) // width)
-                self.decrypt_route_var.set(route_type)
-                messagebox.showinfo("Результат криптоанализа", f"Определен тип маршрута: {route_type}")
-            else:
-                route_type = user_route_type
+            # Создаем матрицы для обоих типов маршрутов
+            spiral_route = cipher.spiral_route(width, height)
+            snake_route = cipher.snake_route(width, height)
+            
+            spiral_matrix = [[' ' for _ in range(width)] for _ in range(height)]
+            snake_matrix = [[' ' for _ in range(width)] for _ in range(height)]
+            
+            # Заполняем матрицы
+            for i, char in enumerate(text):
+                if i < len(spiral_route):
+                    x, y = spiral_route[i]
+                    if 0 <= x < height and 0 <= y < width:
+                        spiral_matrix[x][y] = char
+                
+                if i < len(snake_route):
+                    x, y = snake_route[i]
+                    if 0 <= x < height and 0 <= y < width:
+                        snake_matrix[x][y] = char
+            
+            # Формируем тексты для каждого типа маршрута
+            spiral_text = ''.join(''.join(row) for row in spiral_matrix)
+            snake_text = ''.join(''.join(row) for row in snake_matrix)
+            
+            # Оцениваем качество полученных текстов
+            spiral_quality = cipher.assess_decryption_quality(spiral_text)
+            snake_quality = cipher.assess_decryption_quality(snake_text)
+            
+            # Дополнительная оценка лингвистических параметров
+            spiral_linguistic = cipher.secondary_quality_check(spiral_text)
+            snake_linguistic = cipher.secondary_quality_check(snake_text)
             
             # Дешифруем текст с определенным типом маршрута
             decrypted, table = cipher.decrypt(text, width, route_type=route_type)
 
-            # Вычисляем и отображаем высоту таблицы
-            height = (len(text) + width - 1) // width
-            self.decrypt_height_var.set(str(height))
-
             # Выводим результат
             self.decrypt_output_text.delete("1.0", tk.END)
             self.decrypt_output_text.insert("1.0", decrypted)
+            
+            # Информируем пользователя о определенном типе маршрута с подробностями
+            debug_info = (f"Определен тип маршрута: {route_type}\n\n"
+                         f"Оценка качества текста:\n"
+                         f"Спираль: {spiral_quality:.2f} (лингв: {spiral_linguistic:.2f})\n"
+                         f"Змейка: {snake_quality:.2f} (лингв: {snake_linguistic:.2f})")
+            
+            messagebox.showinfo("Результат криптоанализа", debug_info)
 
         except ValueError as e:
             messagebox.showerror("Ошибка", str(e))
