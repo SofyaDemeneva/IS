@@ -65,7 +65,7 @@ class RouteCipher:
     def detect_weather_forecast(self, text):
         """
         Анализирует текст с использованием частотных N-грамм русского языка,
-        с особым акцентом на слова "солнце", "ветер" и "дождь".
+        с особым акцентом на слово "солнце".
         
         Возвращает:
         - float: оценка от 0.0 до 1.0, где 1.0 означает высокое соответствие языковым паттернам
@@ -82,33 +82,24 @@ class RouteCipher:
         popular_trigrams = ['ост', 'ого', 'ени', 'ста', 'про', 'ная', 'ени', 'что', 
                            'тор', 'ать', 'кот', 'его', 'ном', 'ого', 'ова', 'ств']
         
-        # Ключевые слова погоды, с особым вниманием к ним
+        # Наше любимое слово "солнце" - без него никуда
         sun_word = "солнце"
-        wind_word = "ветер"
-        rain_word = "дождь"
+        sun_ngrams = []
         
-        weather_words = [sun_word, wind_word, rain_word]
-        weather_ngrams = {}
-        
-        # Для каждого ключевого слова создаем n-граммы
-        for word in weather_words:
-            weather_ngrams[word] = []
+        # Делаем кусочки из "солнца" разной длины
+        # Короткие куски (по 2 буквы)
+        for i in range(len(sun_word)-1):
+            sun_ngrams.append(sun_word[i:i+2])
             
-            # Короткие куски (по 2 буквы)
-            for i in range(len(word)-1):
-                weather_ngrams[word].append(word[i:i+2])
-                
-            # Средние куски (по 3 буквы)
-            for i in range(len(word)-2):
-                weather_ngrams[word].append(word[i:i+3])
-                
-            # Большие куски (4 и более букв)
-            for i in range(len(word)-3):
-                weather_ngrams[word].append(word[i:i+4])
+        # Средние куски (по 3 буквы)
+        for i in range(len(sun_word)-2):
+            sun_ngrams.append(sun_word[i:i+3])
             
-            if len(word) >= 5:
-                for i in range(len(word)-4):
-                    weather_ngrams[word].append(word[i:i+5])
+        # Большие куски (4 и 5 букв)
+        for i in range(len(sun_word)-3):
+            sun_ngrams.append(sun_word[i:i+4])
+        for i in range(len(sun_word)-4):
+            sun_ngrams.append(sun_word[i:i+5])
         
         # Считаем сколько обычных биграмм попалось в тексте
         bigram_score = 0
@@ -129,32 +120,23 @@ class RouteCipher:
         # Тоже нормализуем
         trigram_ratio = min(1.0, trigram_score / (total_chars * 0.2))
         
-        # Подсчет для ключевых слов погоды
-        weather_scores = {}
-        for word in weather_words:
-            weather_scores[word] = 0
-            
-            # Считаем куски каждого слова - чем длиннее кусок, тем он ценнее
-            for ngram in weather_ngrams[word]:
-                ngram_count = text_lower.count(ngram)
-                if ngram_count > 0:
-                    # Длинный кусок - большой куш
-                    weather_scores[word] += ngram_count * (len(ngram) / 2.0)
-            
-            # Если нашли целое слово - это джекпот
-            if word in text_lower:
-                weather_scores[word] += 5.0
-                
-            # Нормализуем счет
-            weather_scores[word] = min(1.0, weather_scores[word] / 15.0)
+        # Считаем куски "солнца" - чем длиннее кусок, тем он ценнее
+        sun_score = 0
+        for ngram in sun_ngrams:
+            ngram_count = text_lower.count(ngram)
+            if ngram_count > 0:
+                # Длинный кусок - большой куш
+                sun_score += ngram_count * (len(ngram) / 2.0)
         
-        # Общий погодный счет - средневзвешенное от всех слов
-        weather_score = (weather_scores[sun_word] * 0.4 + 
-                        weather_scores[wind_word] * 0.3 + 
-                        weather_scores[rain_word] * 0.3)
+        # Если нашли целое слово "солнце" - это джекпот
+        if sun_word in text_lower:
+            sun_score += 5.0
+            
+        # Нормализуем солнечный счет
+        sun_score = min(1.0, sun_score / 15.0)
         
         # Смешиваем всё в правильных пропорциях
-        final_score = bigram_ratio * 0.4 + trigram_ratio * 0.3 + weather_score * 0.3
+        final_score = bigram_ratio * 0.4 + trigram_ratio * 0.3 + sun_score * 0.3
         
         return min(1.0, final_score)
 
@@ -234,7 +216,7 @@ class RouteCipher:
         """
         Анализирует текст и определяет оптимальный тип маршрута (спираль или змейка).
         Анализ основан на частотных N-граммах русского языка и 
-        наличии слов "солнце", "ветер", "дождь" и их фрагментов.
+        наличии слова "солнце" и его фрагментов.
 
         Параметры:
         - text: текст для анализа
@@ -287,210 +269,98 @@ class RouteCipher:
         spiral_linguistic = self.secondary_quality_check(spiral_text)
         snake_linguistic = self.secondary_quality_check(snake_text)
         
-        # Проверяем частотность n-грамм погодных слов
+        # Проверяем частотность n-грамм
         spiral_ngram_score = self.detect_weather_forecast(spiral_text)
         snake_ngram_score = self.detect_weather_forecast(snake_text)
         
-        # Специально ищем погодные слова и их части
-        weather_words = ["солнце", "ветер", "дождь"]
+        # Специально ищем солнце и его части - это наш ключ
+        sun_word = "солнце"
+        sun_ngrams = []
         
-        # Создаем словари для результатов поиска
-        spiral_found_words = []
-        snake_found_words = []
-        spiral_weather_score = 0
-        snake_weather_score = 0
-        
-        # Первая проверка - полные слова (они важнее всего)
-        for word in weather_words:
-            if word in spiral_text.lower():
-                spiral_found_words.append(word)
-                spiral_weather_score += 0.45  # Большой бонус за целое слово
+        # Собираем все возможные куски слова "солнце"
+        # Маленькие (по 2)
+        for i in range(len(sun_word)-1):
+            sun_ngrams.append(sun_word[i:i+2])
             
-            if word in snake_text.lower():
-                snake_found_words.append(word)
-                snake_weather_score += 0.45
-        
-        # Вторая проверка - фрагменты слов
-        weather_ngrams = {}
-        for word in weather_words:
-            weather_ngrams[word] = []
+        # Средние (по 3)
+        for i in range(len(sun_word)-2):
+            sun_ngrams.append(sun_word[i:i+3])
             
-            # Формируем n-граммы разной длины
-            for i in range(len(word)-1):
-                weather_ngrams[word].append((word[i:i+2], 2))  # Биграммы
-            for i in range(len(word)-2):
-                weather_ngrams[word].append((word[i:i+3], 3))  # Триграммы
-            for i in range(len(word)-3):
-                weather_ngrams[word].append((word[i:i+4], 4))  # 4-граммы
-            if len(word) >= 5:
-                for i in range(len(word)-4):
-                    weather_ngrams[word].append((word[i:i+5], 5))  # 5-граммы
+        # Большие (4 и 5)
+        for i in range(len(sun_word)-3):
+            sun_ngrams.append(sun_word[i:i+4])
+        for i in range(len(sun_word)-4):
+            sun_ngrams.append(sun_word[i:i+5])
         
-        # Считаем фрагменты в каждом варианте текста
-        for word in weather_words:
-            for ngram, length in weather_ngrams[word]:
-                spiral_count = spiral_text.lower().count(ngram)
-                snake_count = snake_text.lower().count(ngram)
-                
-                # Чем длиннее фрагмент, тем он важнее
-                spiral_weather_score += spiral_count * length * 0.025
-                snake_weather_score += snake_count * length * 0.025
+        # Считаем сколько кусков нашлось в каждом варианте расшифровки
+        spiral_sun_count = sum(spiral_text.lower().count(ng) for ng in sun_ngrams)
+        snake_sun_count = sum(snake_text.lower().count(ng) for ng in sun_ngrams)
         
-        # Общая оценка с новыми весами для каждого критерия
-        spiral_score = (spiral_quality * 0.25 + 
-                      spiral_linguistic * 0.15 + 
-                      spiral_ngram_score * 0.25 + 
-                      spiral_weather_score * 0.35)
-                      
-        snake_score = (snake_quality * 0.25 + 
-                     snake_linguistic * 0.15 + 
-                     snake_ngram_score * 0.25 + 
-                     snake_weather_score * 0.35)
+        # Проверяем, нашлось ли целое слово
+        spiral_has_full_sun = sun_word in spiral_text.lower()
+        snake_has_full_sun = sun_word in snake_text.lower()
         
-        # Учитываем геометрию таблицы и традиционные предпочтения
+        # Бонусы для вариантов
+        spiral_sun_bonus = 0
+        snake_sun_bonus = 0
         
-        # Для квадратных и близких к квадрату таблиц - предпочтение спирали
+        # Если есть полное слово "солнце"
+        if spiral_has_full_sun:
+            spiral_sun_bonus += 0.3
+        if snake_has_full_sun:
+            snake_sun_bonus += 0.3
+            
+        # Если больше фрагментов слова "солнце"
+        if spiral_sun_count > snake_sun_count * 1.5:
+            spiral_sun_bonus += 0.2
+        elif snake_sun_count > spiral_sun_count * 1.5:
+            snake_sun_bonus += 0.2
+        
+        # Вычисляем общую оценку с весами
+        # Баланс между общим качеством и специфическими проверками
+        spiral_score = (spiral_quality * 0.3 + 
+                        spiral_linguistic * 0.2 + 
+                        spiral_ngram_score * 0.3 + 
+                        spiral_sun_bonus)
+                        
+        snake_score = (snake_quality * 0.3 + 
+                       snake_linguistic * 0.2 + 
+                       snake_ngram_score * 0.3 + 
+                       snake_sun_bonus)
+        
+        # Применяем корректировки на основе формы таблицы
+        
+        # 1. Для квадратных таблиц предпочтительнее спираль
         if abs(width - height) <= 2:
             spiral_score *= 1.1
             
-        # Для широких прямоугольных таблиц - предпочтение змейке
+        # 2. Для очень широких таблиц предпочтительнее змейка
         if width > height * 2:
             snake_score *= 1.15
             
-        # Для высоких вертикальных таблиц - тоже змейка
+        # 3. Для очень высоких таблиц тоже предпочтительнее змейка
         if height > width * 2:
             snake_score *= 1.1
             
-        # Для ширины 11 (классика) - спираль
+        # 4. Для таблиц шириной 11 исторически предпочтительнее спираль
         if width == 11:
             spiral_score *= 1.2
             
-        # Для маленьких таблиц - спираль
+        # 5. Для маленьких таблиц (до 5x5) предпочтительнее спираль
         if width <= 5 and height <= 5:
             spiral_score *= 1.1
         
-        # Значительный бонус, если в одном варианте больше полных слов
-        if len(spiral_found_words) > len(snake_found_words):
-            if len(spiral_found_words) >= 2:
-                spiral_score *= 1.5
-            else:
-                spiral_score *= 1.25
-        elif len(snake_found_words) > len(spiral_found_words):
-            if len(snake_found_words) >= 2:
-                snake_score *= 1.5
-            else:
-                snake_score *= 1.25
-        
-        # Дополнительная проверка на непрерывность слов между строками
-        # (более характерна для змейки в русском)
-        if height >= 2:
-            # Для спирали анализируем целостность периметра
-            spiral_edge_coherence = self.analyze_spiral_edge(spiral_matrix, width, height)
-            spiral_score += spiral_edge_coherence * 0.15
-            
-            # Для змейки анализируем переходы между соседними строками
-            snake_row_coherence = self.analyze_snake_rows(snake_matrix, width, height)
-            snake_score += snake_row_coherence * 0.15
+        # Бонус, если в одном варианте есть слово "солнце" или много его фрагментов
+        if (spiral_has_full_sun or spiral_sun_count >= 7) and not (snake_has_full_sun or snake_sun_count >= 7):
+            spiral_score *= 1.5
+        elif (snake_has_full_sun or snake_sun_count >= 7) and not (spiral_has_full_sun or spiral_sun_count >= 7):
+            snake_score *= 1.5
         
         # Возвращаем тип маршрута с наивысшей оценкой
         if snake_score > spiral_score:
             return "змейка"
         else:
             return "спираль"
-            
-    def analyze_spiral_edge(self, matrix, width, height):
-        """Анализирует целостность периметра спиральной матрицы"""
-        score = 0.0
-        
-        try:
-            # Собираем текст по периметру (он должен быть связным для спирали)
-            edge_text = ""
-            
-            # Верхняя строка (слева направо)
-            if height > 0 and width > 0:
-                edge_text += ''.join(matrix[0])
-                
-            # Правый столбец (сверху вниз, без верхнего угла)
-            if height > 1 and width > 0:
-                edge_text += ''.join(matrix[i][width-1] for i in range(1, height))
-                
-            # Нижняя строка (справа налево, без правого угла)
-            if height > 0 and width > 1:
-                edge_text += ''.join(matrix[height-1][j] for j in range(width-2, -1, -1))
-                
-            # Левый столбец (снизу вверх, без углов)
-            if height > 2 and width > 0:
-                edge_text += ''.join(matrix[i][0] for i in range(height-2, 0, -1))
-            
-            # Проверяем связность периметра:
-            # 1. Частота пробелов должна быть естественной
-            space_count = edge_text.count(' ')
-            if len(edge_text) > 0:
-                space_ratio = space_count / len(edge_text)
-                if 0.15 <= space_ratio <= 0.25:  # Хорошее соотношение для русского текста
-                    score += 0.5
-                    
-            # 2. Ищем полные слова на периметре
-            words = [w for w in edge_text.split() if len(w) >= 3]
-            if words:
-                avg_word_len = sum(len(w) for w in words) / len(words)
-                if 4 <= avg_word_len <= 8:  # Нормальный диапазон для русских слов
-                    score += 0.5
-                
-            # 3. Ищем характерные для русского языка предлоги, частицы и окончания
-            common_parts = ['в', 'на', 'с', 'к', 'от', 'из', 'по', 'за', 'и', 'а', 'но', 'ый', 'ая', 'ое', 'ее', 'ого', 'его']
-            parts_found = sum(1 for part in common_parts if part in edge_text.lower())
-            score += min(0.5, parts_found * 0.1)
-            
-        except Exception:
-            return 0.0
-            
-        return min(1.0, score)
-    
-    def analyze_snake_rows(self, matrix, width, height):
-        """Анализирует связность между соседними строками змейки"""
-        score = 0.0
-        
-        try:
-            # Для змейки важна связность между концом одной и началом следующей строки
-            row_transitions = 0
-            valid_transitions = 0
-            
-            for i in range(height-1):
-                if i % 2 == 0:  # Четная строка (слева направо)
-                    # Проверяем переход от конца четной строки к началу нечетной
-                    if matrix[i][width-1].strip() and matrix[i+1][width-1].strip():
-                        row_transitions += 1
-                        # Хороший переход: не разрывает слово (нет пробела с обеих сторон)
-                        if matrix[i][width-1] != ' ' and matrix[i+1][width-1] != ' ':
-                            valid_transitions += 1
-                else:  # Нечетная строка (справа налево)
-                    # Проверяем переход от конца нечетной строки к началу четной
-                    if matrix[i][0].strip() and matrix[i+1][0].strip():
-                        row_transitions += 1
-                        # Хороший переход: не разрывает слово
-                        if matrix[i][0] != ' ' and matrix[i+1][0] != ' ':
-                            valid_transitions += 1
-            
-            # Если есть переходы, оцениваем их качество
-            if row_transitions > 0:
-                transition_quality = valid_transitions / row_transitions
-                score += transition_quality
-                
-            # Анализируем распределение пробелов по строкам (должно быть равномерным)
-            spaces_per_row = [row.count(' ') for row in matrix]
-            if spaces_per_row:
-                avg_spaces = sum(spaces_per_row) / len(spaces_per_row)
-                deviation = sum(abs(s - avg_spaces) for s in spaces_per_row) / len(spaces_per_row)
-                
-                # Меньшее отклонение - лучше для змейки
-                uniformity = 1.0 - min(1.0, deviation / (avg_spaces * 0.5 if avg_spaces > 0 else 1.0))
-                score += uniformity * 0.5
-                
-        except Exception:
-            return 0.0
-            
-        return min(1.0, score)
 
     def get_route(self, width, height, route_type):
         """Возвращает маршрут указанного типа для таблицы заданного размера"""
@@ -716,29 +586,19 @@ class RouteCipher:
         else:
             word_length_score = 0.0
             
-        # 8. Специальный анализ на соответствие прогнозу погоды
+        # 8. НОВОЕ: Специальный анализ на соответствие прогнозу погоды
         weather_score = self.detect_weather_forecast(sample)
-        
-        # 9. Дополнительная проверка на характерные слова погоды
-        weather_terms = ['погода', 'прогноз', 'градус', 'температура', 'осадки', 'давление', 
-                         'влажность', 'облачно', 'ясно', 'тепло', 'холодно', 'мороз', 'жара',
-                         'дождь', 'снег', 'туман', 'ветер', 'солнце', 'гроза', 'метеослужба']
-        
-        terms_found = sum(1 for term in weather_terms if term in sample_lower)
-        weather_terms_score = min(1.0, terms_found / 5.0)  # Максимум при 5+ найденных терминах
 
         # Объединяем все метрики в общую оценку с различными весами
-        # Повышен вес для weather_score и добавлен weather_terms_score
         quality = (
-                russian_ratio * 0.15 +         # Вес соотношения русских букв (уменьшен)
-                space_score * 0.1 +            # Вес правильного соотношения пробелов (уменьшен)
-                bigram_ratio * 0.1 +           # Вес частотных биграмм (уменьшен)
-                punct_score * 0.05 +           # Вес знаков препинания
-                caps_score * 0.05 +            # Вес правильного начала предложений (уменьшен)
-                vowel_consonant_score * 0.05 + # Вес соотношения гласных и согласных (уменьшен)
-                word_length_score * 0.1 +      # Вес средней длины слов
-                weather_score * 0.25 +         # НОВОЕ: Вес соответствия прогнозу погоды (увеличен)
-                weather_terms_score * 0.15     # НОВОЕ: Вес наличия погодных терминов
+                russian_ratio * 0.2 +      # Вес соотношения русских букв (уменьшен)
+                space_score * 0.15 +       # Вес правильного соотношения пробелов (уменьшен)
+                bigram_ratio * 0.1 +       # Вес частотных биграмм (уменьшен)
+                punct_score * 0.05 +       # Вес знаков препинания
+                caps_score * 0.1 +         # Вес правильного начала предложений
+                vowel_consonant_score * 0.1 + # Вес соотношения гласных и согласных
+                word_length_score * 0.1 +  # Вес средней длины слов
+                weather_score * 0.2        # НОВОЕ: Вес соответствия прогнозу погоды (значительный вес)
         )
 
         return min(1.0, max(0.0, quality))
@@ -1256,148 +1116,6 @@ class RouteCipher:
             except Exception as e:
                 messagebox.showerror("Ошибка", f"Не удалось сохранить файл: {e}")
 
-    def estimate_table_size(self, text):
-        """
-        Автоматически определяет оптимальный размер таблицы для дешифрования.
-        
-        Параметры:
-        - text: зашифрованный текст
-        
-        Возвращает:
-        - словарь с информацией о наилучшей ширине таблицы
-        """
-        if not text:
-            return {"best_width": 0, "message": "Пустой текст"}
-            
-        text_length = len(text)
-        
-        # Ограничиваем максимальное значение ширины для ускорения
-        max_width = min(30, text_length)
-        results = []
-        
-        # Типичные ширины для маршрутных шифров - проверяем их первыми
-        typical_widths = [5, 6, 8, 10, 11, 12, 14, 15, 16, 20, 24, 25, 30]
-        widths_to_check = [w for w in typical_widths if 2 <= w <= max_width]
-        
-        # Добавляем остальные ширины
-        widths_to_check.extend([w for w in range(2, max_width + 1) if w not in widths_to_check])
-        
-        # Проверяем разные варианты ширины
-        for width in widths_to_check:
-            height = (text_length + width - 1) // width
-            
-            # Если высота слишком большая или слишком маленькая относительно ширины, пропускаем
-            if height > 5 * width or height < 2:
-                continue
-                
-            # Пробуем оба типа маршрутов
-            for route_type in ["спираль", "змейка"]:
-                # Создаем маршрут и заполняем матрицу
-                route = self.get_route(width, height, route_type)
-                matrix = [[' ' for _ in range(width)] for _ in range(height)]
-                
-                for idx, char in enumerate(text[:min(len(text), len(route))]):
-                    if idx < len(route):
-                        x, y = route[idx]
-                        if 0 <= x < height and 0 <= y < width:
-                            matrix[x][y] = char
-                
-                # Получаем расшифрованный текст
-                decrypted = ''.join(''.join(row) for row in matrix)
-                
-                # Оцениваем качество текста по разным критериям
-                quality = self.assess_decryption_quality(decrypted)
-                linguistic = self.secondary_quality_check(decrypted)
-                ngram_score = self.detect_weather_forecast(decrypted)
-                
-                # Повышенный вес для ключевых слов погоды
-                weather_words = ["солнце", "ветер", "дождь"]
-                weather_bonus = 0.0
-                found_words = []
-                
-                # Проверяем наличие погодных слов (целиком)
-                for word in weather_words:
-                    if word in decrypted.lower():
-                        weather_bonus += 0.4  # Значительный бонус за полные слова
-                        found_words.append(word)
-                
-                # Проверяем фрагменты погодных слов
-                for word in weather_words:
-                    word_ngrams = []
-                    
-                    # Собираем n-граммы для слова, с приоритетом для более длинных фрагментов
-                    for i in range(len(word)-1):
-                        word_ngrams.append(word[i:i+2])
-                    for i in range(len(word)-2):
-                        word_ngrams.append(word[i:i+3])
-                    for i in range(len(word)-3):
-                        word_ngrams.append(word[i:i+4])
-                    
-                    # Считаем фрагменты в тексте, с разным весом по длине
-                    for ng in word_ngrams:
-                        count = decrypted.lower().count(ng)
-                        if count > 0:
-                            # Длинные n-граммы имеют больший вес
-                            weather_bonus += count * (len(ng) * 0.05)
-                
-                # Итоговая оценка с перераспределенными весами
-                total_score = quality * 0.25 + linguistic * 0.15 + ngram_score * 0.25 + weather_bonus * 0.35
-                
-                # Учет предпочтительных форм таблиц
-                if abs(width - height) <= 2:  # Квадратные
-                    total_score *= 1.1
-                
-                # Предпочтение для некоторых традиционных ширин
-                if width in [5, 10, 11, 15, 20, 25, 30]:
-                    total_score *= 1.15
-                
-                # Если нашлись полные слова - серьезное преимущество
-                if len(found_words) >= 2:
-                    total_score *= 1.5
-                elif len(found_words) == 1:
-                    total_score *= 1.25
-                
-                # Штраф для нетипичных соотношений сторон
-                if width > height * 3 or height > width * 3:
-                    total_score *= 0.8
-                    
-                # Сохраняем результат
-                results.append((width, route_type, total_score, quality, linguistic, ngram_score, found_words))
-        
-        # Сортируем результаты по убыванию оценки
-        results.sort(key=lambda x: x[2], reverse=True)
-        
-        # Если есть результаты, возвращаем лучший
-        if results:
-            best = results[0]
-            best_width = best[0]
-            best_route = best[1]
-            best_score = best[2]
-            found_words = best[6]
-            
-            # Собираем также ТОП-3 для отладки
-            top_results = results[:3]
-            
-            # Если у нескольких решений близкие оценки, предпочитаем то, где больше найдено полных слов
-            if len(results) >= 2 and abs(results[0][2] - results[1][2]) < 0.1:
-                if len(results[1][6]) > len(results[0][6]):
-                    best = results[1]
-                    best_width = best[0]
-                    best_route = best[1]
-                    best_score = best[2]
-                    found_words = best[6]
-            
-            return {
-                "best_width": best_width,
-                "best_route": best_route,
-                "best_score": best_score,
-                "top_results": top_results,
-                "found_words": found_words,
-                "message": f"Наилучшая ширина: {best_width}, маршрут: {best_route}, оценка: {best_score:.2f}"
-            }
-        else:
-            return {"best_width": text_length, "message": "Не удалось определить оптимальную ширину"}
-
 
 # Определение класса RouteGUI
 class RouteGUI:
@@ -1490,22 +1208,14 @@ class RouteGUI:
         params_frame = ttk.LabelFrame(self.decrypt_frame, text="Параметры дешифрования")
         params_frame.pack(fill=tk.X, padx=5, pady=5)
 
-        # Ширина таблицы - теперь с опцией автоопределения
+        # Ширина таблицы
         width_frame = ttk.Frame(params_frame)
         width_frame.pack(fill=tk.X, padx=5, pady=5)
 
         ttk.Label(width_frame, text="Ширина таблицы:").pack(side=tk.LEFT, padx=5)
-        
-        # Чекбокс для автоопределения ширины
-        self.auto_width_var = tk.BooleanVar(value=True)
-        auto_width_check = ttk.Checkbutton(width_frame, text="Автоопределение", variable=self.auto_width_var, 
-                                          command=self.toggle_width_entry)
-        auto_width_check.pack(side=tk.LEFT, padx=5)
-        
-        # Поле для ручного ввода ширины
-        self.decrypt_width_var = tk.StringVar(value="")
-        self.width_entry = ttk.Entry(width_frame, textvariable=self.decrypt_width_var, width=5, state="disabled")
-        self.width_entry.pack(side=tk.LEFT, padx=5)
+        self.decrypt_width_var = tk.StringVar(value="11")
+        width_entry = ttk.Entry(width_frame, textvariable=self.decrypt_width_var, width=5)
+        width_entry.pack(side=tk.LEFT, padx=5)
 
         # Тип маршрута (для отображения результата криптоанализа)
         route_frame = ttk.Frame(params_frame)
@@ -1538,119 +1248,6 @@ class RouteGUI:
 
         save_btn = ttk.Button(save_frame, text="Сохранить текст", command=self.save_file_decrypted)
         save_btn.pack(side=tk.LEFT, padx=5)
-        
-    def toggle_width_entry(self):
-        # Включение/выключение поля ввода ширины в зависимости от состояния чекбокса
-        if self.auto_width_var.get():
-            self.width_entry.config(state="disabled")
-        else:
-            self.width_entry.config(state="normal")
-        
-    def decrypt_text(self):
-        """Дешифрует введенный текст"""
-        # Берем текст из поля ввода
-        text = self.decrypt_input_text.get("1.0", tk.END).strip()
-
-        if not text:
-            messagebox.showerror("Ошибка", "Введите текст для дешифрования")
-            return
-
-        try:
-            # Используем автоматическое определение ширины или ручной ввод
-            cipher = RouteCipher()
-            
-            if self.auto_width_var.get():
-                # Используем автоопределение ширины
-                table_estimation = cipher.estimate_table_size(text)
-                width = table_estimation["best_width"]
-                best_route = table_estimation.get("best_route", "")
-                
-                # Обновляем поле ширины для информации
-                self.decrypt_width_var.set(str(width))
-                
-                # Упрощенное информационное сообщение
-                messagebox.showinfo("Параметры дешифрования", 
-                                    f"Ширина таблицы: {width}\n"
-                                    f"Тип маршрута: {best_route}")
-            else:
-                # Берем ширину из поля ввода
-                width_str = self.decrypt_width_var.get().strip()
-                if not width_str:
-                    messagebox.showerror("Ошибка", "Введите ширину таблицы для дешифрования")
-                    return
-                width = int(width_str)
-                best_route = ""
-
-            # Вычисляем высоту
-            height = (len(text) + width - 1) // width
-            
-            # Определяем тип маршрута с помощью криптоанализа
-            route_type = best_route if best_route else cipher.analyze_route_pattern(text, width, height)
-            self.decrypt_route_var.set(route_type)
-            
-            # Теперь делаем два варианта - спиралькой и змейкой, чтобы сравнить
-            spiral_route = cipher.spiral_route(width, height)
-            snake_route = cipher.snake_route(width, height)
-            
-            # Пустые матрицы для заполнения
-            spiral_matrix = [[' ' for _ in range(width)] for _ in range(height)]
-            snake_matrix = [[' ' for _ in range(width)] for _ in range(height)]
-            
-            # Заполняем матрицы буквами из шифротекста
-            for i, char in enumerate(text):
-                # Спиральный вариант
-                if i < len(spiral_route):
-                    x, y = spiral_route[i]
-                    if 0 <= x < height and 0 <= y < width:
-                        spiral_matrix[x][y] = char
-                
-                # Змеиный вариант
-                if i < len(snake_route):
-                    x, y = snake_route[i]
-                    if 0 <= x < height and 0 <= y < width:
-                        snake_matrix[x][y] = char
-            
-            # Склеиваем все строки в единый текст
-            spiral_text = ''.join(''.join(row) for row in spiral_matrix)
-            snake_text = ''.join(''.join(row) for row in snake_matrix)
-            
-            # Проверяем качество текстов - какой больше похож на нормальный
-            spiral_quality = cipher.assess_decryption_quality(spiral_text)
-            snake_quality = cipher.assess_decryption_quality(snake_text)
-            
-            # Еще одна проверка - лингвистический анализ
-            spiral_linguistic = cipher.secondary_quality_check(spiral_text)
-            snake_linguistic = cipher.secondary_quality_check(snake_text)
-            
-            # И проверка на распространенные n-граммы
-            spiral_ngram = cipher.detect_weather_forecast(spiral_text)
-            snake_ngram = cipher.detect_weather_forecast(snake_text)
-            
-            # Считаем n-граммы ключевых слов в каждом варианте
-            weather_words = ["солнце", "ветер", "дождь"]
-            
-            # Дешифруем текст с определенным типом маршрута
-            decrypted, table = cipher.decrypt(text, width, route_type=route_type)
-
-            # Выводим результат
-            self.decrypt_output_text.delete("1.0", tk.END)
-            self.decrypt_output_text.insert("1.0", decrypted)
-            
-            # Сохраняем высоту для последующего сохранения
-            self.decrypt_height_var.set(str(height))
-            
-            # Если в ручном режиме, показываем выбранный маршрут
-            if not self.auto_width_var.get():
-                messagebox.showinfo("Параметры дешифрования", 
-                                    f"Ширина таблицы: {width}\n"
-                                    f"Тип маршрута: {route_type}")
-
-        except ValueError as e:
-            messagebox.showerror("Ошибка", str(e))
-        except Exception as e:
-            messagebox.showerror("Ошибка", f"Произошла ошибка при дешифровании: {str(e)}")
-            import traceback
-            traceback.print_exc()
 
     def open_file_for_encryption(self):
         """Открывает файл для шифрования"""
@@ -1701,155 +1298,136 @@ class RouteGUI:
             import traceback
             traceback.print_exc()
 
-    def decrypt(self, text, width=None, height=None, route_type=None, filler='Х'):
-        """
-        Дешифрует текст с использованием указанного типа маршрута.
+    def decrypt_text(self):
+        """Дешифрует введенный текст"""
+        # Берем текст из поля ввода
+        text = self.decrypt_input_text.get("1.0", tk.END).strip()
 
-        Параметры:
-        - text: зашифрованный текст
-        - width: ширина таблицы (если None, будет извлечена из текста)
-        - height: не используется, вычисляется автоматически
-        - route_type: тип маршрута (если None, будет определен с помощью криптоанализа)
-        - filler: символ-заполнитель, использованный при шифровании
+        if not text:
+            messagebox.showerror("Ошибка", "Введите текст для дешифрования")
+            return
 
-        Возвращает:
-        - кортеж (дешифрованный текст, информация о дешифровании)
-        """
-        # Если ширина не определена, оцениваем размер таблицы
-        if width is None:
-            estimated = self.estimate_table_size(text)
-            width = estimated["best_width"] if isinstance(estimated, dict) else estimated[0][0]
+        try:
+            # Ширину таблицы пользователь должен указать сам
+            width_str = self.decrypt_width_var.get().strip()
+            if not width_str:
+                messagebox.showerror("Ошибка", "Введите ширину таблицы для дешифрования")
+                return
 
-        # Всегда вычисляем высоту автоматически на основе ширины и длины текста
-        height = (len(text) + width - 1) // width
+            # Переводим в число и считаем высоту исходя из длины текста
+            width = int(width_str)
+            height = (len(text) + width - 1) // width
+            
+            # Создаем наш волшебный инструмент дешифровки
+            cipher = RouteCipher()
+            
+            # Магия начинается! Анализируем и выбираем тип маршрута
+            route_type = cipher.analyze_route_pattern(text, width, height)
+            self.decrypt_route_var.set(route_type)
+            
+            # Теперь делаем два варианта - спиралькой и змейкой, чтобы сравнить
+            spiral_route = cipher.spiral_route(width, height)
+            snake_route = cipher.snake_route(width, height)
+            
+            # Пустые матрицы для заполнения
+            spiral_matrix = [[' ' for _ in range(width)] for _ in range(height)]
+            snake_matrix = [[' ' for _ in range(width)] for _ in range(height)]
+            
+            # Заполняем матрицы буквами из шифротекста
+            for i, char in enumerate(text):
+                # Спиральный вариант
+                if i < len(spiral_route):
+                    x, y = spiral_route[i]
+                    if 0 <= x < height and 0 <= y < width:
+                        spiral_matrix[x][y] = char
+                
+                # Змеиный вариант
+                if i < len(snake_route):
+                    x, y = snake_route[i]
+                    if 0 <= x < height and 0 <= y < width:
+                        snake_matrix[x][y] = char
+            
+            # Склеиваем все строки в единый текст
+            spiral_text = ''.join(''.join(row) for row in spiral_matrix)
+            snake_text = ''.join(''.join(row) for row in snake_matrix)
+            
+            # Проверяем качество текстов - какой больше похож на нормальный
+            spiral_quality = cipher.assess_decryption_quality(spiral_text)
+            snake_quality = cipher.assess_decryption_quality(snake_text)
+            
+            # Еще одна проверка - лингвистический анализ
+            spiral_linguistic = cipher.secondary_quality_check(spiral_text)
+            snake_linguistic = cipher.secondary_quality_check(snake_text)
+            
+            # И проверка на распространенные n-граммы
+            spiral_ngram = cipher.detect_weather_forecast(spiral_text)
+            snake_ngram = cipher.detect_weather_forecast(snake_text)
+            
+            # Список частых биграмм и триграмм для демонстрации
+            popular_bigrams = ['ст', 'но', 'то', 'на', 'ен', 'ов', 'ни', 'ра', 'во']
+            popular_trigrams = ['ост', 'ого', 'ени', 'ста', 'про', 'ная']
+            
+            # Считаем популярные n-граммы в каждом варианте
+            spiral_bigrams = [bg for bg in popular_bigrams if bg in spiral_text.lower()]
+            snake_bigrams = [bg for bg in popular_bigrams if bg in snake_text.lower()]
+            
+            spiral_trigrams = [tg for tg in popular_trigrams if tg in spiral_text.lower()]
+            snake_trigrams = [tg for tg in popular_trigrams if tg in snake_text.lower()]
+            
+            # Генерируем n-граммы для слова "солнце"
+            sun_word = "солнце"
+            sun_ngrams = []
+            
+            # Биграммы
+            for i in range(len(sun_word)-1):
+                sun_ngrams.append(sun_word[i:i+2])
+                
+            # Триграммы и более длинные n-граммы
+            for i in range(len(sun_word)-2):
+                sun_ngrams.append(sun_word[i:i+3])
+            for i in range(len(sun_word)-3):
+                sun_ngrams.append(sun_word[i:i+4])
+            
+            # Считаем n-граммы слова "солнце" в каждом варианте расшифровки
+            spiral_sun_ngrams = [ng for ng in sun_ngrams if ng in spiral_text.lower()]
+            snake_sun_ngrams = [ng for ng in sun_ngrams if ng in snake_text.lower()]
+            
+            # Проверяем полное слово
+            spiral_has_sun = sun_word in spiral_text.lower()
+            snake_has_sun = sun_word in snake_text.lower()
+            
+            # Дешифруем текст с определенным типом маршрута
+            decrypted, table = cipher.decrypt(text, width, route_type=route_type)
 
-        # Если тип маршрута не указан или пустой, определяем его с помощью криптоанализа
-        if route_type is None or route_type.strip() == "":
-            route_type = self.analyze_route_pattern(text, width, height)
+            # Выводим результат
+            self.decrypt_output_text.delete("1.0", tk.END)
+            self.decrypt_output_text.insert("1.0", decrypted)
+            
+            # Сохраняем высоту для последующего сохранения
+            self.decrypt_height_var.set(str(height))
+            
+            # Информируем пользователя о определенном типе маршрута с подробностями
+            debug_info = (f"Определен тип маршрута: {route_type}\n\n"
+                         f"Оценка качества текста:\n"
+                         f"Спираль: {spiral_quality:.2f} (лингв: {spiral_linguistic:.2f}, n-граммы: {spiral_ngram:.2f})\n"
+                         f"Популярные биграммы: {', '.join(spiral_bigrams) if spiral_bigrams else 'не найдены'}\n"
+                         f"Популярные триграммы: {', '.join(spiral_trigrams) if spiral_trigrams else 'не найдены'}\n"
+                         f"N-граммы 'солнце': {', '.join(spiral_sun_ngrams) if spiral_sun_ngrams else 'не найдены'}\n"
+                         f"Полное слово 'солнце': {'да' if spiral_has_sun else 'нет'}\n\n"
+                         f"Змейка: {snake_quality:.2f} (лингв: {snake_linguistic:.2f}, n-граммы: {snake_ngram:.2f})\n"
+                         f"Популярные биграммы: {', '.join(snake_bigrams) if snake_bigrams else 'не найдены'}\n"
+                         f"Популярные триграммы: {', '.join(snake_trigrams) if snake_trigrams else 'не найдены'}\n"
+                         f"N-граммы 'солнце': {', '.join(snake_sun_ngrams) if snake_sun_ngrams else 'не найдены'}\n"
+                         f"Полное слово 'солнце': {'да' if snake_has_sun else 'нет'}\n")
+            
+            messagebox.showinfo("Результат криптоанализа", debug_info)
 
-        # Получаем маршрут
-        route = self.get_route(width, height, route_type)
-
-        # Создаем пустую матрицу
-        matrix = [['' for _ in range(width)] for _ in range(height)]
-
-        # Заполняем матрицу, следуя по маршруту
-        for i, (x, y) in enumerate(route):
-            if i < len(text) and 0 <= x < height and 0 <= y < width:
-                matrix[x][y] = text[i]
-
-        # Формируем дешифрованный текст, считывая матрицу по строкам
-        decrypted = ''
-        for row in matrix:
-            decrypted += ''.join(row)
-
-        # Удаляем символы-заполнители
-        decrypted = decrypted.rstrip(filler)
-
-        # Оцениваем качество дешифрования
-        quality = self.assess_decryption_quality(decrypted)
-
-        # Формируем информацию о дешифровании
-        info = {
-            "width": width,
-            "height": height,
-            "route_type": route_type,
-            "quality_score": quality
-        }
-
-        return decrypted, self.format_table_with_route(text, width, height, route_type)
-
-    def encrypt(self, text, width, route_type="спираль", filler='Х', remove_spaces=False):
-        """
-        Шифрует текст с использованием указанного типа маршрута.
-
-        Параметры:
-        - text: исходный текст для шифрования
-        - width: ширина таблицы
-        - route_type: тип маршрута ("спираль" или "змейка")
-        - filler: символ-заполнитель для дополнения текста
-        - remove_spaces: удалять ли пробелы при предобработке
-
-        Возвращает:
-        - кортеж (зашифрованный текст, информация о шифровании)
-        """
-        # Проверяем валидность текста
-        if not self.validate_text(text):
-            raise ValueError("Текст содержит недопустимые символы")
-
-        # Предобрабатываем текст, высота будет вычислена автоматически
-        preprocessed = self.preprocess_text(text, width, None, filler, remove_spaces)
-        clean_text = preprocessed[0]
-        width = preprocessed[1]
-        height = preprocessed[2]  # Высота вычисляется автоматически
-        spaces_removed = preprocessed[3]
-
-        # Создаем матрицу
-        matrix = self.create_matrix(clean_text, width, height)
-
-        # Получаем маршрут
-        route = self.get_route(width, height, route_type)
-
-        # Формируем зашифрованный текст, следуя по маршруту
-        encrypted = "".join(matrix[i][j] for i, j in route)
-
-        # Формируем информацию о шифровании
-        info = {
-            "width": width,
-            "height": height,
-            "route_type": route_type,
-            "filler": filler,
-            "original_length": len(text),
-            "removed_spaces": spaces_removed
-        }
-
-        return encrypted, self.format_table_with_route(clean_text, width, height, route_type)
-
-    def extract_metadata_from_content(self, content):
-        """Извлекает метаданные (ширину и тип маршрута) из содержимого файла"""
-        metadata = {}
-
-        # Ищем метаданные в разных форматах
-
-        # 1. Ищем метаданные в начале файла (формат <W:число><R:тип>)
-        width_pattern = re.compile(r'<W:(\d+)>')
-        route_pattern = re.compile(r'<R:(спираль|змейка)>')
-
-        width_match = width_pattern.search(content)
-        route_match = route_pattern.search(content)
-
-        if width_match:
-            metadata['width'] = width_match.group(1)
-
-        if route_match:
-            metadata['route_type'] = route_match.group(1)
-
-        # 2. Ищем метаданные в секции комментариев (формат <!-- METADATA ... -->)
-        metadata_section = re.search(r'<!-- METADATA\s+(.*?)\s+-->', content, re.DOTALL)
-        if metadata_section:
-            section_content = metadata_section.group(1)
-
-            # Ищем ширину и тип маршрута в секции метаданных
-            width_in_section = re.search(r'<W:(\d+)>', section_content)
-            route_in_section = re.search(r'<R:(спираль|змейка)>', section_content)
-
-            if width_in_section and 'width' not in metadata:
-                metadata['width'] = width_in_section.group(1)
-
-            if route_in_section and 'route_type' not in metadata:
-                metadata['route_type'] = route_in_section.group(1)
-
-        # 3. Ищем информацию в текстовом формате (например, "Размер таблицы: 11x5")
-        table_size = re.search(r'Размер таблицы:\s*(\d+)x\d+', content)
-        route_info = re.search(r'Тип маршрута:\s*(спираль|змейка)', content)
-
-        if table_size and 'width' not in metadata:
-            metadata['width'] = table_size.group(1)
-
-        if route_info and 'route_type' not in metadata:
-            metadata['route_type'] = route_info.group(1)
-
-        return metadata
+        except ValueError as e:
+            messagebox.showerror("Ошибка", str(e))
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Произошла ошибка при дешифровании: {str(e)}")
+            import traceback
+            traceback.print_exc()
 
     def open_file_for_decryption(self):
         """Открывает файл для дешифрования"""
