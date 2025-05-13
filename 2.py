@@ -65,7 +65,7 @@ class RouteCipher:
     def detect_weather_forecast(self, text):
         """
         Анализирует текст с использованием частотных N-грамм русского языка,
-        с особым акцентом на слово "солнце".
+        с особым акцентом на слова "солнце", "ветер" и "дождь".
         
         Возвращает:
         - float: оценка от 0.0 до 1.0, где 1.0 означает высокое соответствие языковым паттернам
@@ -82,24 +82,33 @@ class RouteCipher:
         popular_trigrams = ['ост', 'ого', 'ени', 'ста', 'про', 'ная', 'ени', 'что', 
                            'тор', 'ать', 'кот', 'его', 'ном', 'ого', 'ова', 'ств']
         
-        # Наше любимое слово "солнце" - без него никуда
+        # Ключевые слова погоды, с особым вниманием к ним
         sun_word = "солнце"
-        sun_ngrams = []
+        wind_word = "ветер"
+        rain_word = "дождь"
         
-        # Делаем кусочки из "солнца" разной длины
-        # Короткие куски (по 2 буквы)
-        for i in range(len(sun_word)-1):
-            sun_ngrams.append(sun_word[i:i+2])
+        weather_words = [sun_word, wind_word, rain_word]
+        weather_ngrams = {}
+        
+        # Для каждого ключевого слова создаем n-граммы
+        for word in weather_words:
+            weather_ngrams[word] = []
             
-        # Средние куски (по 3 буквы)
-        for i in range(len(sun_word)-2):
-            sun_ngrams.append(sun_word[i:i+3])
+            # Короткие куски (по 2 буквы)
+            for i in range(len(word)-1):
+                weather_ngrams[word].append(word[i:i+2])
+                
+            # Средние куски (по 3 буквы)
+            for i in range(len(word)-2):
+                weather_ngrams[word].append(word[i:i+3])
+                
+            # Большие куски (4 и более букв)
+            for i in range(len(word)-3):
+                weather_ngrams[word].append(word[i:i+4])
             
-        # Большие куски (4 и 5 букв)
-        for i in range(len(sun_word)-3):
-            sun_ngrams.append(sun_word[i:i+4])
-        for i in range(len(sun_word)-4):
-            sun_ngrams.append(sun_word[i:i+5])
+            if len(word) >= 5:
+                for i in range(len(word)-4):
+                    weather_ngrams[word].append(word[i:i+5])
         
         # Считаем сколько обычных биграмм попалось в тексте
         bigram_score = 0
@@ -120,23 +129,32 @@ class RouteCipher:
         # Тоже нормализуем
         trigram_ratio = min(1.0, trigram_score / (total_chars * 0.2))
         
-        # Считаем куски "солнца" - чем длиннее кусок, тем он ценнее
-        sun_score = 0
-        for ngram in sun_ngrams:
-            ngram_count = text_lower.count(ngram)
-            if ngram_count > 0:
-                # Длинный кусок - большой куш
-                sun_score += ngram_count * (len(ngram) / 2.0)
-        
-        # Если нашли целое слово "солнце" - это джекпот
-        if sun_word in text_lower:
-            sun_score += 5.0
+        # Подсчет для ключевых слов погоды
+        weather_scores = {}
+        for word in weather_words:
+            weather_scores[word] = 0
             
-        # Нормализуем солнечный счет
-        sun_score = min(1.0, sun_score / 15.0)
+            # Считаем куски каждого слова - чем длиннее кусок, тем он ценнее
+            for ngram in weather_ngrams[word]:
+                ngram_count = text_lower.count(ngram)
+                if ngram_count > 0:
+                    # Длинный кусок - большой куш
+                    weather_scores[word] += ngram_count * (len(ngram) / 2.0)
+            
+            # Если нашли целое слово - это джекпот
+            if word in text_lower:
+                weather_scores[word] += 5.0
+                
+            # Нормализуем счет
+            weather_scores[word] = min(1.0, weather_scores[word] / 15.0)
+        
+        # Общий погодный счет - средневзвешенное от всех слов
+        weather_score = (weather_scores[sun_word] * 0.4 + 
+                        weather_scores[wind_word] * 0.3 + 
+                        weather_scores[rain_word] * 0.3)
         
         # Смешиваем всё в правильных пропорциях
-        final_score = bigram_ratio * 0.4 + trigram_ratio * 0.3 + sun_score * 0.3
+        final_score = bigram_ratio * 0.4 + trigram_ratio * 0.3 + weather_score * 0.3
         
         return min(1.0, final_score)
 
@@ -216,7 +234,7 @@ class RouteCipher:
         """
         Анализирует текст и определяет оптимальный тип маршрута (спираль или змейка).
         Анализ основан на частотных N-граммах русского языка и 
-        наличии слова "солнце" и его фрагментов.
+        наличии слов "солнце", "ветер", "дождь" и их фрагментов.
 
         Параметры:
         - text: текст для анализа
@@ -273,60 +291,66 @@ class RouteCipher:
         spiral_ngram_score = self.detect_weather_forecast(spiral_text)
         snake_ngram_score = self.detect_weather_forecast(snake_text)
         
-        # Специально ищем солнце и его части - это наш ключ
-        sun_word = "солнце"
-        sun_ngrams = []
+        # Специально ищем погодные слова и их части - это наши ключи
+        weather_words = ["солнце", "ветер", "дождь"]
+        weather_ngrams = {}
         
-        # Собираем все возможные куски слова "солнце"
-        # Маленькие (по 2)
-        for i in range(len(sun_word)-1):
-            sun_ngrams.append(sun_word[i:i+2])
+        # Собираем все возможные куски погодных слов
+        for word in weather_words:
+            weather_ngrams[word] = []
             
-        # Средние (по 3)
-        for i in range(len(sun_word)-2):
-            sun_ngrams.append(sun_word[i:i+3])
+            # Маленькие (по 2)
+            for i in range(len(word)-1):
+                weather_ngrams[word].append(word[i:i+2])
+                
+            # Средние (по 3)
+            for i in range(len(word)-2):
+                weather_ngrams[word].append(word[i:i+3])
+                
+            # Большие (4 и более)
+            for i in range(len(word)-3):
+                weather_ngrams[word].append(word[i:i+4])
+            if len(word) >= 5:
+                for i in range(len(word)-4):
+                    weather_ngrams[word].append(word[i:i+5])
+        
+        # Счетчики для каждого типа маршрута
+        spiral_weather_score = 0
+        snake_weather_score = 0
+        
+        # Считаем фрагменты и полные слова для каждого варианта
+        spiral_has_full_words = []
+        snake_has_full_words = []
+        
+        for word in weather_words:
+            # Проверяем полные слова
+            if word in spiral_text.lower():
+                spiral_has_full_words.append(word)
+                spiral_weather_score += 0.3
+                
+            if word in snake_text.lower():
+                snake_has_full_words.append(word)
+                snake_weather_score += 0.3
             
-        # Большие (4 и 5)
-        for i in range(len(sun_word)-3):
-            sun_ngrams.append(sun_word[i:i+4])
-        for i in range(len(sun_word)-4):
-            sun_ngrams.append(sun_word[i:i+5])
-        
-        # Считаем сколько кусков нашлось в каждом варианте расшифровки
-        spiral_sun_count = sum(spiral_text.lower().count(ng) for ng in sun_ngrams)
-        snake_sun_count = sum(snake_text.lower().count(ng) for ng in sun_ngrams)
-        
-        # Проверяем, нашлось ли целое слово
-        spiral_has_full_sun = sun_word in spiral_text.lower()
-        snake_has_full_sun = sun_word in snake_text.lower()
-        
-        # Бонусы для вариантов
-        spiral_sun_bonus = 0
-        snake_sun_bonus = 0
-        
-        # Если есть полное слово "солнце"
-        if spiral_has_full_sun:
-            spiral_sun_bonus += 0.3
-        if snake_has_full_sun:
-            snake_sun_bonus += 0.3
+            # Считаем количество фрагментов
+            spiral_ngram_count = sum(spiral_text.lower().count(ng) for ng in weather_ngrams[word])
+            snake_ngram_count = sum(snake_text.lower().count(ng) for ng in weather_ngrams[word])
             
-        # Если больше фрагментов слова "солнце"
-        if spiral_sun_count > snake_sun_count * 1.5:
-            spiral_sun_bonus += 0.2
-        elif snake_sun_count > spiral_sun_count * 1.5:
-            snake_sun_bonus += 0.2
+            # Даем небольшой бонус за каждый найденный фрагмент
+            spiral_weather_score += min(0.2, spiral_ngram_count * 0.02)
+            snake_weather_score += min(0.2, snake_ngram_count * 0.02)
         
         # Вычисляем общую оценку с весами
         # Баланс между общим качеством и специфическими проверками
         spiral_score = (spiral_quality * 0.3 + 
                         spiral_linguistic * 0.2 + 
                         spiral_ngram_score * 0.3 + 
-                        spiral_sun_bonus)
+                        spiral_weather_score)
                         
         snake_score = (snake_quality * 0.3 + 
                        snake_linguistic * 0.2 + 
                        snake_ngram_score * 0.3 + 
-                       snake_sun_bonus)
+                       snake_weather_score)
         
         # Применяем корректировки на основе формы таблицы
         
@@ -350,10 +374,10 @@ class RouteCipher:
         if width <= 5 and height <= 5:
             spiral_score *= 1.1
         
-        # Бонус, если в одном варианте есть слово "солнце" или много его фрагментов
-        if (spiral_has_full_sun or spiral_sun_count >= 7) and not (snake_has_full_sun or snake_sun_count >= 7):
+        # Бонус, если в одном варианте есть полные погодные слова, а в другом нет
+        if spiral_has_full_words and not snake_has_full_words:
             spiral_score *= 1.5
-        elif (snake_has_full_sun or snake_sun_count >= 7) and not (spiral_has_full_sun or spiral_sun_count >= 7):
+        elif snake_has_full_words and not spiral_has_full_words:
             snake_score *= 1.5
         
         # Возвращаем тип маршрута с наивысшей оценкой
@@ -1163,28 +1187,33 @@ class RouteCipher:
                 linguistic = self.secondary_quality_check(decrypted)
                 ngram_score = self.detect_weather_forecast(decrypted)
                 
-                # Считаем специальный бонус для "солнца"
-                sun_word = "солнце"
-                sun_bonus = 0.0
+                # Считаем специальный бонус для погодных слов
+                weather_words = ["солнце", "ветер", "дождь"]
+                weather_bonus = 0.0
                 
-                # Проверяем наличие слова "солнце"
-                if sun_word in decrypted.lower():
-                    sun_bonus = 0.3
+                # Проверяем наличие погодных слов
+                for word in weather_words:
+                    if word in decrypted.lower():
+                        weather_bonus += 0.2  # Бонус за каждое найденное слово
                 
-                # Проверяем фрагменты слова "солнце"
-                sun_ngrams = []
-                for i in range(len(sun_word)-1):
-                    sun_ngrams.append(sun_word[i:i+2])
-                for i in range(len(sun_word)-2):
-                    sun_ngrams.append(sun_word[i:i+3])
-                for i in range(len(sun_word)-3):
-                    sun_ngrams.append(sun_word[i:i+4])
-                
-                sun_ngram_count = sum(decrypted.lower().count(ng) for ng in sun_ngrams)
-                sun_bonus += min(0.2, sun_ngram_count * 0.02)
+                # Проверяем фрагменты погодных слов
+                for word in weather_words:
+                    word_ngrams = []
+                    
+                    # Собираем n-граммы для слова
+                    for i in range(len(word)-1):
+                        word_ngrams.append(word[i:i+2])
+                    for i in range(len(word)-2):
+                        word_ngrams.append(word[i:i+3])
+                    for i in range(len(word)-3):
+                        word_ngrams.append(word[i:i+4])
+                    
+                    # Считаем фрагменты в тексте
+                    word_ngram_count = sum(decrypted.lower().count(ng) for ng in word_ngrams)
+                    weather_bonus += min(0.1, word_ngram_count * 0.01)  # Небольшой бонус за фрагменты
                 
                 # Итоговая оценка с учетом формы таблицы
-                total_score = quality * 0.3 + linguistic * 0.2 + ngram_score * 0.3 + sun_bonus
+                total_score = quality * 0.3 + linguistic * 0.2 + ngram_score * 0.3 + weather_bonus
                 
                 # Учет предпочтительных форм таблиц
                 if abs(width - height) <= 2:  # Квадратные
@@ -1388,14 +1417,10 @@ class RouteGUI:
                 # Обновляем поле ширины для информации
                 self.decrypt_width_var.set(str(width))
                 
-                # Показываем результаты автоопределения
-                top_results = table_estimation.get("top_results", [])
-                top_info = "Результаты автоопределения:\n"
-                for w, route, score, q, l, n in top_results:
-                    top_info += f"Ширина: {w}, Маршрут: {route}, Оценка: {score:.2f}\n"
-                
-                messagebox.showinfo("Автоопределение размера", 
-                                    f"Определена оптимальная ширина: {width}\n\n{top_info}")
+                # Упрощенное информационное сообщение
+                messagebox.showinfo("Параметры дешифрования", 
+                                    f"Ширина таблицы: {width}\n"
+                                    f"Тип маршрута: {best_route}")
             else:
                 # Берем ширину из поля ввода
                 width_str = self.decrypt_width_var.get().strip()
@@ -1450,35 +1475,8 @@ class RouteGUI:
             spiral_ngram = cipher.detect_weather_forecast(spiral_text)
             snake_ngram = cipher.detect_weather_forecast(snake_text)
             
-            # Список частых биграмм и триграмм для демонстрации
-            popular_bigrams = ['ст', 'но', 'то', 'на', 'ен', 'ов', 'ни', 'ра', 'во']
-            popular_trigrams = ['ост', 'ого', 'ени', 'ста', 'про', 'ная']
-            
-            # Считаем популярные n-граммы в каждом варианте
-            spiral_bigrams = [bg for bg in popular_bigrams if bg in spiral_text.lower()]
-            snake_bigrams = [bg for bg in popular_bigrams if bg in snake_text.lower()]
-            
-            spiral_trigrams = [tg for tg in popular_trigrams if tg in spiral_text.lower()]
-            snake_trigrams = [tg for tg in popular_trigrams if tg in snake_text.lower()]
-            
-            # Считаем n-граммы слова "солнце" в каждом варианте расшифровки
-            sun_word = "солнце" 
-            sun_ngrams = []
-            
-            # Делаем кусочки из "солнца"
-            for i in range(len(sun_word)-1):
-                sun_ngrams.append(sun_word[i:i+2])
-            for i in range(len(sun_word)-2):
-                sun_ngrams.append(sun_word[i:i+3])
-            for i in range(len(sun_word)-3):
-                sun_ngrams.append(sun_word[i:i+4])
-            
-            spiral_sun_ngrams = [ng for ng in sun_ngrams if ng in spiral_text.lower()]
-            snake_sun_ngrams = [ng for ng in sun_ngrams if ng in snake_text.lower()]
-            
-            # Проверяем полное слово
-            spiral_has_sun = sun_word in spiral_text.lower()
-            snake_has_sun = sun_word in snake_text.lower()
+            # Считаем n-граммы ключевых слов в каждом варианте
+            weather_words = ["солнце", "ветер", "дождь"]
             
             # Дешифруем текст с определенным типом маршрута
             decrypted, table = cipher.decrypt(text, width, route_type=route_type)
@@ -1490,23 +1488,11 @@ class RouteGUI:
             # Сохраняем высоту для последующего сохранения
             self.decrypt_height_var.set(str(height))
             
-            # Информируем пользователя о определенном типе маршрута с подробностями
-            debug_info = (f"Определен тип маршрута: {route_type}\n"
-                         f"Размер таблицы: {width}x{height}\n\n"
-                         f"Оценка качества текста:\n"
-                         f"Спираль: {spiral_quality:.2f} (лингв: {spiral_linguistic:.2f}, n-граммы: {spiral_ngram:.2f})\n"
-                         f"Популярные биграммы: {', '.join(spiral_bigrams) if spiral_bigrams else 'не найдены'}\n"
-                         f"Популярные триграммы: {', '.join(spiral_trigrams) if spiral_trigrams else 'не найдены'}\n"
-                         f"N-граммы 'солнце': {', '.join(spiral_sun_ngrams) if spiral_sun_ngrams else 'не найдены'}\n"
-                         f"Полное слово 'солнце': {'да' if spiral_has_sun else 'нет'}\n\n"
-                         f"Змейка: {snake_quality:.2f} (лингв: {snake_linguistic:.2f}, n-граммы: {snake_ngram:.2f})\n"
-                         f"Популярные биграммы: {', '.join(snake_bigrams) if snake_bigrams else 'не найдены'}\n"
-                         f"Популярные триграммы: {', '.join(snake_trigrams) if snake_trigrams else 'не найдены'}\n"
-                         f"N-граммы 'солнце': {', '.join(snake_sun_ngrams) if snake_sun_ngrams else 'не найдены'}\n"
-                         f"Полное слово 'солнце': {'да' if snake_has_sun else 'нет'}\n")
-            
-            # Показываем отчет - пусть все знают какие мы умные!
-            messagebox.showinfo("Результат криптоанализа", debug_info)
+            # Если в ручном режиме, показываем выбранный маршрут
+            if not self.auto_width_var.get():
+                messagebox.showinfo("Параметры дешифрования", 
+                                    f"Ширина таблицы: {width}\n"
+                                    f"Тип маршрута: {route_type}")
 
         except ValueError as e:
             messagebox.showerror("Ошибка", str(e))
