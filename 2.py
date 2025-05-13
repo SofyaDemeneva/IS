@@ -38,6 +38,14 @@ class RouteCipher:
     NUMBERS = '0123456789'
     SPECIAL = ".,!?;:()[]{}\"'«»—–-…№%$@#&*+=/\\|~`^<>_ \n\t" + chr(8239) + chr(8201)  # Добавляем специальные пробелы
     ALL_CHARS = ALPHABET + ALPHABET.lower() + NUMBERS + SPECIAL
+    
+    # Добавляем константы для анализа погодных прогнозов
+    WEATHER_KEYWORDS = [
+        'солнце', 'солнечно', 'ясно', 'дождь', 'дождливо', 'осадки', 
+        'ветер', 'ветрено', 'прогноз', 'погода', 'температура', 'тепло', 
+        'холодно', 'мороз', 'град', 'гроза', 'снег', 'облачно', 'туман',
+        'градус', 'давление', 'влажность', 'метеослужба'
+    ]
 
     def validate_text(self, text):
         # Проверяем, что текст содержит только допустимые символы
@@ -53,6 +61,47 @@ class RouteCipher:
             error_msg += "\n\nДобавьте эти символы в SPECIAL или удалите их из текста."
             raise ValueError(error_msg)
         return True
+
+    def detect_weather_forecast(self, text):
+        """
+        Определяет, является ли текст прогнозом погоды, и выдает оценку соответствия
+        
+        Возвращает:
+        - float: оценка от 0.0 до 1.0, где 1.0 означает высокую вероятность того, 
+                что текст является прогнозом погоды
+        """
+        # Преобразуем текст в нижний регистр для поиска ключевых слов
+        text_lower = text.lower()
+        
+        # Считаем количество найденных ключевых слов о погоде
+        keyword_count = 0
+        for keyword in self.WEATHER_KEYWORDS:
+            if keyword in text_lower:
+                keyword_count += 1
+        
+        # Проверяем обязательное наличие ключевых слов: солнце, дождь, ветер
+        essential_keywords = ['солнце', 'дождь', 'ветер']
+        essential_count = sum(1 for kw in essential_keywords if kw in text_lower)
+        
+        # Оцениваем наличие характерных для прогноза погоды числовых шаблонов
+        # (градусы, проценты влажности и т.д.)
+        temp_patterns = re.findall(r'[-+]?\d+\s*(?:градус|°|°C|°С|°F|°Ф|С|C|Ф|F)', text_lower)
+        humidity_patterns = re.findall(r'\d+\s*%\s*(?:влажност|осадк)', text_lower)
+        time_patterns = re.findall(r'(?:утр|день|вечер|ноч)[а-я]*', text_lower)
+        
+        # Базовая оценка на основе ключевых слов
+        base_score = min(1.0, keyword_count / 8.0)  # Нормализуем до 1.0
+        
+        # Увеличиваем оценку, если найдены все важные ключевые слова
+        essential_bonus = essential_count / len(essential_keywords) * 0.4
+        
+        # Увеличиваем оценку за наличие числовых паттернов
+        pattern_score = min(0.3, (len(temp_patterns) + len(humidity_patterns) + len(time_patterns)) * 0.1)
+        
+        # Итоговая оценка
+        weather_score = base_score + essential_bonus + pattern_score
+        
+        return min(1.0, weather_score)
 
     def pad_text(self, text, width, height):
         # Проверяем, что размеры таблицы корректны
@@ -129,7 +178,7 @@ class RouteCipher:
     def analyze_route_pattern(self, text, width, height):
         """
         Анализирует текст и определяет оптимальный тип маршрута (спираль или змейка).
-        Улучшенная версия с более точным определением.
+        Улучшенная версия с более точным определением для прогнозов погоды.
 
         Параметры:
         - text: текст для анализа
@@ -181,9 +230,14 @@ class RouteCipher:
         spiral_linguistic = self.secondary_quality_check(spiral_text)
         snake_linguistic = self.secondary_quality_check(snake_text)
         
+        # Проверяем наличие ключевых слов погодных прогнозов
+        spiral_weather_score = self.detect_weather_forecast(spiral_text)
+        snake_weather_score = self.detect_weather_forecast(snake_text)
+        
         # Вычисляем общую оценку с весами
-        spiral_score = spiral_quality * 0.7 + spiral_linguistic * 0.3
-        snake_score = snake_quality * 0.7 + snake_linguistic * 0.3
+        # Даем большой вес погодной оценке, так как мы знаем, что шифруются прогнозы погоды
+        spiral_score = spiral_quality * 0.4 + spiral_linguistic * 0.2 + spiral_weather_score * 0.4
+        snake_score = snake_quality * 0.4 + snake_linguistic * 0.2 + snake_weather_score * 0.4
         
         # Применяем корректировки на основе формы таблицы
         
@@ -199,17 +253,24 @@ class RouteCipher:
         if height > width * 2:
             snake_score *= 1.1
             
-        # 4. Для таблиц шириной 11 исторически предпочтительнее спираль
+        # 4. Для таблиц шириной 11 исторически предпочтительнее спираль для прогнозов погоды
         if width == 11:
-            spiral_score *= 1.15
+            spiral_score *= 1.2
             
         # 5. Для маленьких таблиц (до 5x5) предпочтительнее спираль
         if width <= 5 and height <= 5:
             spiral_score *= 1.1
             
-        # Для отладки можно раскомментировать:
-        # print(f"Спираль: {spiral_score:.2f} (качество: {spiral_quality:.2f}, лингв: {spiral_linguistic:.2f})")
-        # print(f"Змейка: {snake_score:.2f} (качество: {snake_quality:.2f}, лингв: {snake_linguistic:.2f})")
+        # Дополнительно проверяем наличие ключевых слов погоды
+        essential_keywords = ['солнце', 'дождь', 'ветер']
+        spiral_has_essential = all(keyword in spiral_text.lower() for keyword in essential_keywords)
+        snake_has_essential = all(keyword in snake_text.lower() for keyword in essential_keywords)
+        
+        # Если один вариант содержит все ключевые слова, а другой - нет, значительно повышаем его оценку
+        if spiral_has_essential and not snake_has_essential:
+            spiral_score *= 1.3
+        elif snake_has_essential and not spiral_has_essential:
+            snake_score *= 1.3
         
         # Возвращаем тип маршрута с наивысшей оценкой
         if snake_score > spiral_score:
@@ -354,7 +415,7 @@ class RouteCipher:
         return fillers
 
     def assess_decryption_quality(self, text):
-        """Усовершенствованная оценка качества расшифровки"""
+        """Усовершенствованная оценка качества расшифровки с учетом прогноза погоды"""
         # Используем только первые 1000 символов для анализа (достаточная выборка)
         sample = text[:1000] if len(text) > 1000 else text
 
@@ -440,16 +501,20 @@ class RouteCipher:
                 word_length_score *= (1.0 - long_words_ratio)
         else:
             word_length_score = 0.0
+            
+        # 8. НОВОЕ: Специальный анализ на соответствие прогнозу погоды
+        weather_score = self.detect_weather_forecast(sample)
 
         # Объединяем все метрики в общую оценку с различными весами
         quality = (
-                russian_ratio * 0.3 +  # Вес соотношения русских букв
-                space_score * 0.2 +  # Вес правильного соотношения пробелов
-                bigram_ratio * 0.15 +  # Вес частотных биграмм
-                punct_score * 0.05 +  # Вес знаков препинания
-                caps_score * 0.1 +  # Вес правильного начала предложений
-                vowel_consonant_score * 0.1 +  # Вес соотношения гласных и согласных
-                word_length_score * 0.1  # Вес средней длины слов
+                russian_ratio * 0.2 +      # Вес соотношения русских букв (уменьшен)
+                space_score * 0.15 +       # Вес правильного соотношения пробелов (уменьшен)
+                bigram_ratio * 0.1 +       # Вес частотных биграмм (уменьшен)
+                punct_score * 0.05 +       # Вес знаков препинания
+                caps_score * 0.1 +         # Вес правильного начала предложений
+                vowel_consonant_score * 0.1 + # Вес соотношения гласных и согласных
+                word_length_score * 0.1 +  # Вес средней длины слов
+                weather_score * 0.2        # НОВОЕ: Вес соответствия прогнозу погоды (значительный вес)
         )
 
         return min(1.0, max(0.0, quality))
@@ -740,8 +805,23 @@ class RouteCipher:
             return  # Пользователь отменил выбор файла
 
         try:
-            # Записываем только расшифрованный текст
-            write_file(file_path, content)
+            # Получим зашифрованный текст и информацию о расшифровке
+            encrypted_text = self.decrypt_input_text.get("1.0", tk.END).strip()
+
+            # Составляем информацию о дешифровании из имеющихся данных
+            width = self.decrypt_width_var.get().strip()
+            height = self.decrypt_height_var.get().strip()
+            route_type = self.decrypt_route_var.get().strip()
+
+            # Составляем полный текст для сохранения
+            full_content = f"=== ЗАШИФРОВАННЫЙ ТЕКСТ ===\n{encrypted_text}\n\n"
+            full_content += f"=== ИНФОРМАЦИЯ О РАСШИФРОВКЕ ===\n"
+            full_content += f"Размер таблицы: {width}x{height}\n"
+            full_content += f"Тип маршрута: {route_type}\n\n"
+            full_content += f"=== РАСШИФРОВАННЫЙ ТЕКСТ ===\n{content}"
+
+            # Записываем в файл
+            write_file(file_path, full_content)
 
         except Exception as e:
             messagebox.showerror("Ошибка", f"Не удалось сохранить файл: {str(e)}")
@@ -1192,6 +1272,15 @@ class RouteGUI:
             spiral_linguistic = cipher.secondary_quality_check(spiral_text)
             snake_linguistic = cipher.secondary_quality_check(snake_text)
             
+            # Оценка погодных паттернов
+            spiral_weather = cipher.detect_weather_forecast(spiral_text)
+            snake_weather = cipher.detect_weather_forecast(snake_text)
+            
+            # Проверяем наличие ключевых слов погоды
+            essential_keywords = ['солнце', 'дождь', 'ветер']
+            spiral_essential = [kw for kw in essential_keywords if kw in spiral_text.lower()]
+            snake_essential = [kw for kw in essential_keywords if kw in snake_text.lower()]
+            
             # Дешифруем текст с определенным типом маршрута
             decrypted, table = cipher.decrypt(text, width, route_type=route_type)
 
@@ -1199,11 +1288,16 @@ class RouteGUI:
             self.decrypt_output_text.delete("1.0", tk.END)
             self.decrypt_output_text.insert("1.0", decrypted)
             
+            # Сохраняем высоту для последующего сохранения
+            self.decrypt_height_var.set(str(height))
+            
             # Информируем пользователя о определенном типе маршрута с подробностями
             debug_info = (f"Определен тип маршрута: {route_type}\n\n"
-                         f"Оценка качества текста:\n"
-                         f"Спираль: {spiral_quality:.2f} (лингв: {spiral_linguistic:.2f})\n"
-                         f"Змейка: {snake_quality:.2f} (лингв: {snake_linguistic:.2f})")
+                         f"Оценка качества текста для прогноза погоды:\n"
+                         f"Спираль: {spiral_quality:.2f} (лингв: {spiral_linguistic:.2f}, погода: {spiral_weather:.2f})\n"
+                         f"Ключевые слова в спирали: {', '.join(spiral_essential) if spiral_essential else 'не найдены'}\n\n"
+                         f"Змейка: {snake_quality:.2f} (лингв: {snake_linguistic:.2f}, погода: {snake_weather:.2f})\n"
+                         f"Ключевые слова в змейке: {', '.join(snake_essential) if snake_essential else 'не найдены'}")
             
             messagebox.showinfo("Результат криптоанализа", debug_info)
 
