@@ -1420,7 +1420,8 @@ class RouteGUI:
                          f"N-граммы 'солнце': {', '.join(snake_sun_ngrams) if snake_sun_ngrams else 'не найдены'}\n"
                          f"Полное слово 'солнце': {'да' if snake_has_sun else 'нет'}\n")
             
-            messagebox.showinfo("Результат криптоанализа", debug_info)
+            # Удаляем вывод информационного сообщения
+            # messagebox.showinfo("Результат криптоанализа", debug_info)
 
         except ValueError as e:
             messagebox.showerror("Ошибка", str(e))
