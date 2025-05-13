@@ -287,104 +287,210 @@ class RouteCipher:
         spiral_linguistic = self.secondary_quality_check(spiral_text)
         snake_linguistic = self.secondary_quality_check(snake_text)
         
-        # Проверяем частотность n-грамм
+        # Проверяем частотность n-грамм погодных слов
         spiral_ngram_score = self.detect_weather_forecast(spiral_text)
         snake_ngram_score = self.detect_weather_forecast(snake_text)
         
-        # Специально ищем погодные слова и их части - это наши ключи
+        # Специально ищем погодные слова и их части
         weather_words = ["солнце", "ветер", "дождь"]
-        weather_ngrams = {}
         
-        # Собираем все возможные куски погодных слов
-        for word in weather_words:
-            weather_ngrams[word] = []
-            
-            # Маленькие (по 2)
-            for i in range(len(word)-1):
-                weather_ngrams[word].append(word[i:i+2])
-                
-            # Средние (по 3)
-            for i in range(len(word)-2):
-                weather_ngrams[word].append(word[i:i+3])
-                
-            # Большие (4 и более)
-            for i in range(len(word)-3):
-                weather_ngrams[word].append(word[i:i+4])
-            if len(word) >= 5:
-                for i in range(len(word)-4):
-                    weather_ngrams[word].append(word[i:i+5])
-        
-        # Счетчики для каждого типа маршрута
+        # Создаем словари для результатов поиска
+        spiral_found_words = []
+        snake_found_words = []
         spiral_weather_score = 0
         snake_weather_score = 0
         
-        # Считаем фрагменты и полные слова для каждого варианта
-        spiral_has_full_words = []
-        snake_has_full_words = []
-        
+        # Первая проверка - полные слова (они важнее всего)
         for word in weather_words:
-            # Проверяем полные слова
             if word in spiral_text.lower():
-                spiral_has_full_words.append(word)
-                spiral_weather_score += 0.3
-                
+                spiral_found_words.append(word)
+                spiral_weather_score += 0.45  # Большой бонус за целое слово
+            
             if word in snake_text.lower():
-                snake_has_full_words.append(word)
-                snake_weather_score += 0.3
+                snake_found_words.append(word)
+                snake_weather_score += 0.45
+        
+        # Вторая проверка - фрагменты слов
+        weather_ngrams = {}
+        for word in weather_words:
+            weather_ngrams[word] = []
             
-            # Считаем количество фрагментов
-            spiral_ngram_count = sum(spiral_text.lower().count(ng) for ng in weather_ngrams[word])
-            snake_ngram_count = sum(snake_text.lower().count(ng) for ng in weather_ngrams[word])
-            
-            # Даем небольшой бонус за каждый найденный фрагмент
-            spiral_weather_score += min(0.2, spiral_ngram_count * 0.02)
-            snake_weather_score += min(0.2, snake_ngram_count * 0.02)
+            # Формируем n-граммы разной длины
+            for i in range(len(word)-1):
+                weather_ngrams[word].append((word[i:i+2], 2))  # Биграммы
+            for i in range(len(word)-2):
+                weather_ngrams[word].append((word[i:i+3], 3))  # Триграммы
+            for i in range(len(word)-3):
+                weather_ngrams[word].append((word[i:i+4], 4))  # 4-граммы
+            if len(word) >= 5:
+                for i in range(len(word)-4):
+                    weather_ngrams[word].append((word[i:i+5], 5))  # 5-граммы
         
-        # Вычисляем общую оценку с весами
-        # Баланс между общим качеством и специфическими проверками
-        spiral_score = (spiral_quality * 0.3 + 
-                        spiral_linguistic * 0.2 + 
-                        spiral_ngram_score * 0.3 + 
-                        spiral_weather_score)
-                        
-        snake_score = (snake_quality * 0.3 + 
-                       snake_linguistic * 0.2 + 
-                       snake_ngram_score * 0.3 + 
-                       snake_weather_score)
+        # Считаем фрагменты в каждом варианте текста
+        for word in weather_words:
+            for ngram, length in weather_ngrams[word]:
+                spiral_count = spiral_text.lower().count(ngram)
+                snake_count = snake_text.lower().count(ngram)
+                
+                # Чем длиннее фрагмент, тем он важнее
+                spiral_weather_score += spiral_count * length * 0.025
+                snake_weather_score += snake_count * length * 0.025
         
-        # Применяем корректировки на основе формы таблицы
+        # Общая оценка с новыми весами для каждого критерия
+        spiral_score = (spiral_quality * 0.25 + 
+                      spiral_linguistic * 0.15 + 
+                      spiral_ngram_score * 0.25 + 
+                      spiral_weather_score * 0.35)
+                      
+        snake_score = (snake_quality * 0.25 + 
+                     snake_linguistic * 0.15 + 
+                     snake_ngram_score * 0.25 + 
+                     snake_weather_score * 0.35)
         
-        # 1. Для квадратных таблиц предпочтительнее спираль
+        # Учитываем геометрию таблицы и традиционные предпочтения
+        
+        # Для квадратных и близких к квадрату таблиц - предпочтение спирали
         if abs(width - height) <= 2:
             spiral_score *= 1.1
             
-        # 2. Для очень широких таблиц предпочтительнее змейка
+        # Для широких прямоугольных таблиц - предпочтение змейке
         if width > height * 2:
             snake_score *= 1.15
             
-        # 3. Для очень высоких таблиц тоже предпочтительнее змейка
+        # Для высоких вертикальных таблиц - тоже змейка
         if height > width * 2:
             snake_score *= 1.1
             
-        # 4. Для таблиц шириной 11 исторически предпочтительнее спираль
+        # Для ширины 11 (классика) - спираль
         if width == 11:
             spiral_score *= 1.2
             
-        # 5. Для маленьких таблиц (до 5x5) предпочтительнее спираль
+        # Для маленьких таблиц - спираль
         if width <= 5 and height <= 5:
             spiral_score *= 1.1
         
-        # Бонус, если в одном варианте есть полные погодные слова, а в другом нет
-        if spiral_has_full_words and not snake_has_full_words:
-            spiral_score *= 1.5
-        elif snake_has_full_words and not spiral_has_full_words:
-            snake_score *= 1.5
+        # Значительный бонус, если в одном варианте больше полных слов
+        if len(spiral_found_words) > len(snake_found_words):
+            if len(spiral_found_words) >= 2:
+                spiral_score *= 1.5
+            else:
+                spiral_score *= 1.25
+        elif len(snake_found_words) > len(spiral_found_words):
+            if len(snake_found_words) >= 2:
+                snake_score *= 1.5
+            else:
+                snake_score *= 1.25
+        
+        # Дополнительная проверка на непрерывность слов между строками
+        # (более характерна для змейки в русском)
+        if height >= 2:
+            # Для спирали анализируем целостность периметра
+            spiral_edge_coherence = self.analyze_spiral_edge(spiral_matrix, width, height)
+            spiral_score += spiral_edge_coherence * 0.15
+            
+            # Для змейки анализируем переходы между соседними строками
+            snake_row_coherence = self.analyze_snake_rows(snake_matrix, width, height)
+            snake_score += snake_row_coherence * 0.15
         
         # Возвращаем тип маршрута с наивысшей оценкой
         if snake_score > spiral_score:
             return "змейка"
         else:
             return "спираль"
+            
+    def analyze_spiral_edge(self, matrix, width, height):
+        """Анализирует целостность периметра спиральной матрицы"""
+        score = 0.0
+        
+        try:
+            # Собираем текст по периметру (он должен быть связным для спирали)
+            edge_text = ""
+            
+            # Верхняя строка (слева направо)
+            if height > 0 and width > 0:
+                edge_text += ''.join(matrix[0])
+                
+            # Правый столбец (сверху вниз, без верхнего угла)
+            if height > 1 and width > 0:
+                edge_text += ''.join(matrix[i][width-1] for i in range(1, height))
+                
+            # Нижняя строка (справа налево, без правого угла)
+            if height > 0 and width > 1:
+                edge_text += ''.join(matrix[height-1][j] for j in range(width-2, -1, -1))
+                
+            # Левый столбец (снизу вверх, без углов)
+            if height > 2 and width > 0:
+                edge_text += ''.join(matrix[i][0] for i in range(height-2, 0, -1))
+            
+            # Проверяем связность периметра:
+            # 1. Частота пробелов должна быть естественной
+            space_count = edge_text.count(' ')
+            if len(edge_text) > 0:
+                space_ratio = space_count / len(edge_text)
+                if 0.15 <= space_ratio <= 0.25:  # Хорошее соотношение для русского текста
+                    score += 0.5
+                    
+            # 2. Ищем полные слова на периметре
+            words = [w for w in edge_text.split() if len(w) >= 3]
+            if words:
+                avg_word_len = sum(len(w) for w in words) / len(words)
+                if 4 <= avg_word_len <= 8:  # Нормальный диапазон для русских слов
+                    score += 0.5
+                
+            # 3. Ищем характерные для русского языка предлоги, частицы и окончания
+            common_parts = ['в', 'на', 'с', 'к', 'от', 'из', 'по', 'за', 'и', 'а', 'но', 'ый', 'ая', 'ое', 'ее', 'ого', 'его']
+            parts_found = sum(1 for part in common_parts if part in edge_text.lower())
+            score += min(0.5, parts_found * 0.1)
+            
+        except Exception:
+            return 0.0
+            
+        return min(1.0, score)
+    
+    def analyze_snake_rows(self, matrix, width, height):
+        """Анализирует связность между соседними строками змейки"""
+        score = 0.0
+        
+        try:
+            # Для змейки важна связность между концом одной и началом следующей строки
+            row_transitions = 0
+            valid_transitions = 0
+            
+            for i in range(height-1):
+                if i % 2 == 0:  # Четная строка (слева направо)
+                    # Проверяем переход от конца четной строки к началу нечетной
+                    if matrix[i][width-1].strip() and matrix[i+1][width-1].strip():
+                        row_transitions += 1
+                        # Хороший переход: не разрывает слово (нет пробела с обеих сторон)
+                        if matrix[i][width-1] != ' ' and matrix[i+1][width-1] != ' ':
+                            valid_transitions += 1
+                else:  # Нечетная строка (справа налево)
+                    # Проверяем переход от конца нечетной строки к началу четной
+                    if matrix[i][0].strip() and matrix[i+1][0].strip():
+                        row_transitions += 1
+                        # Хороший переход: не разрывает слово
+                        if matrix[i][0] != ' ' and matrix[i+1][0] != ' ':
+                            valid_transitions += 1
+            
+            # Если есть переходы, оцениваем их качество
+            if row_transitions > 0:
+                transition_quality = valid_transitions / row_transitions
+                score += transition_quality
+                
+            # Анализируем распределение пробелов по строкам (должно быть равномерным)
+            spaces_per_row = [row.count(' ') for row in matrix]
+            if spaces_per_row:
+                avg_spaces = sum(spaces_per_row) / len(spaces_per_row)
+                deviation = sum(abs(s - avg_spaces) for s in spaces_per_row) / len(spaces_per_row)
+                
+                # Меньшее отклонение - лучше для змейки
+                uniformity = 1.0 - min(1.0, deviation / (avg_spaces * 0.5 if avg_spaces > 0 else 1.0))
+                score += uniformity * 0.5
+                
+        except Exception:
+            return 0.0
+            
+        return min(1.0, score)
 
     def get_route(self, width, height, route_type):
         """Возвращает маршрут указанного типа для таблицы заданного размера"""
@@ -610,19 +716,29 @@ class RouteCipher:
         else:
             word_length_score = 0.0
             
-        # 8. НОВОЕ: Специальный анализ на соответствие прогнозу погоды
+        # 8. Специальный анализ на соответствие прогнозу погоды
         weather_score = self.detect_weather_forecast(sample)
+        
+        # 9. Дополнительная проверка на характерные слова погоды
+        weather_terms = ['погода', 'прогноз', 'градус', 'температура', 'осадки', 'давление', 
+                         'влажность', 'облачно', 'ясно', 'тепло', 'холодно', 'мороз', 'жара',
+                         'дождь', 'снег', 'туман', 'ветер', 'солнце', 'гроза', 'метеослужба']
+        
+        terms_found = sum(1 for term in weather_terms if term in sample_lower)
+        weather_terms_score = min(1.0, terms_found / 5.0)  # Максимум при 5+ найденных терминах
 
         # Объединяем все метрики в общую оценку с различными весами
+        # Повышен вес для weather_score и добавлен weather_terms_score
         quality = (
-                russian_ratio * 0.2 +      # Вес соотношения русских букв (уменьшен)
-                space_score * 0.15 +       # Вес правильного соотношения пробелов (уменьшен)
-                bigram_ratio * 0.1 +       # Вес частотных биграмм (уменьшен)
-                punct_score * 0.05 +       # Вес знаков препинания
-                caps_score * 0.1 +         # Вес правильного начала предложений
-                vowel_consonant_score * 0.1 + # Вес соотношения гласных и согласных
-                word_length_score * 0.1 +  # Вес средней длины слов
-                weather_score * 0.2        # НОВОЕ: Вес соответствия прогнозу погоды (значительный вес)
+                russian_ratio * 0.15 +         # Вес соотношения русских букв (уменьшен)
+                space_score * 0.1 +            # Вес правильного соотношения пробелов (уменьшен)
+                bigram_ratio * 0.1 +           # Вес частотных биграмм (уменьшен)
+                punct_score * 0.05 +           # Вес знаков препинания
+                caps_score * 0.05 +            # Вес правильного начала предложений (уменьшен)
+                vowel_consonant_score * 0.05 + # Вес соотношения гласных и согласных (уменьшен)
+                word_length_score * 0.1 +      # Вес средней длины слов
+                weather_score * 0.25 +         # НОВОЕ: Вес соответствия прогнозу погоды (увеличен)
+                weather_terms_score * 0.15     # НОВОЕ: Вес наличия погодных терминов
         )
 
         return min(1.0, max(0.0, quality))
@@ -1159,12 +1275,19 @@ class RouteCipher:
         max_width = min(30, text_length)
         results = []
         
+        # Типичные ширины для маршрутных шифров - проверяем их первыми
+        typical_widths = [5, 6, 8, 10, 11, 12, 14, 15, 16, 20, 24, 25, 30]
+        widths_to_check = [w for w in typical_widths if 2 <= w <= max_width]
+        
+        # Добавляем остальные ширины
+        widths_to_check.extend([w for w in range(2, max_width + 1) if w not in widths_to_check])
+        
         # Проверяем разные варианты ширины
-        for width in range(2, max_width + 1):
+        for width in widths_to_check:
             height = (text_length + width - 1) // width
             
-            # Если высота слишком большая, пропускаем
-            if height > 5 * width:
+            # Если высота слишком большая или слишком маленькая относительно ширины, пропускаем
+            if height > 5 * width or height < 2:
                 continue
                 
             # Пробуем оба типа маршрутов
@@ -1182,25 +1305,27 @@ class RouteCipher:
                 # Получаем расшифрованный текст
                 decrypted = ''.join(''.join(row) for row in matrix)
                 
-                # Оцениваем качество текста
+                # Оцениваем качество текста по разным критериям
                 quality = self.assess_decryption_quality(decrypted)
                 linguistic = self.secondary_quality_check(decrypted)
                 ngram_score = self.detect_weather_forecast(decrypted)
                 
-                # Считаем специальный бонус для погодных слов
+                # Повышенный вес для ключевых слов погоды
                 weather_words = ["солнце", "ветер", "дождь"]
                 weather_bonus = 0.0
+                found_words = []
                 
-                # Проверяем наличие погодных слов
+                # Проверяем наличие погодных слов (целиком)
                 for word in weather_words:
                     if word in decrypted.lower():
-                        weather_bonus += 0.2  # Бонус за каждое найденное слово
+                        weather_bonus += 0.4  # Значительный бонус за полные слова
+                        found_words.append(word)
                 
                 # Проверяем фрагменты погодных слов
                 for word in weather_words:
                     word_ngrams = []
                     
-                    # Собираем n-граммы для слова
+                    # Собираем n-граммы для слова, с приоритетом для более длинных фрагментов
                     for i in range(len(word)-1):
                         word_ngrams.append(word[i:i+2])
                     for i in range(len(word)-2):
@@ -1208,21 +1333,36 @@ class RouteCipher:
                     for i in range(len(word)-3):
                         word_ngrams.append(word[i:i+4])
                     
-                    # Считаем фрагменты в тексте
-                    word_ngram_count = sum(decrypted.lower().count(ng) for ng in word_ngrams)
-                    weather_bonus += min(0.1, word_ngram_count * 0.01)  # Небольшой бонус за фрагменты
+                    # Считаем фрагменты в тексте, с разным весом по длине
+                    for ng in word_ngrams:
+                        count = decrypted.lower().count(ng)
+                        if count > 0:
+                            # Длинные n-граммы имеют больший вес
+                            weather_bonus += count * (len(ng) * 0.05)
                 
-                # Итоговая оценка с учетом формы таблицы
-                total_score = quality * 0.3 + linguistic * 0.2 + ngram_score * 0.3 + weather_bonus
+                # Итоговая оценка с перераспределенными весами
+                total_score = quality * 0.25 + linguistic * 0.15 + ngram_score * 0.25 + weather_bonus * 0.35
                 
                 # Учет предпочтительных форм таблиц
                 if abs(width - height) <= 2:  # Квадратные
                     total_score *= 1.1
-                if width == 11:  # Исторически хорошая ширина
-                    total_score *= 1.2
+                
+                # Предпочтение для некоторых традиционных ширин
+                if width in [5, 10, 11, 15, 20, 25, 30]:
+                    total_score *= 1.15
+                
+                # Если нашлись полные слова - серьезное преимущество
+                if len(found_words) >= 2:
+                    total_score *= 1.5
+                elif len(found_words) == 1:
+                    total_score *= 1.25
+                
+                # Штраф для нетипичных соотношений сторон
+                if width > height * 3 or height > width * 3:
+                    total_score *= 0.8
                     
                 # Сохраняем результат
-                results.append((width, route_type, total_score, quality, linguistic, ngram_score))
+                results.append((width, route_type, total_score, quality, linguistic, ngram_score, found_words))
         
         # Сортируем результаты по убыванию оценки
         results.sort(key=lambda x: x[2], reverse=True)
@@ -1233,15 +1373,26 @@ class RouteCipher:
             best_width = best[0]
             best_route = best[1]
             best_score = best[2]
+            found_words = best[6]
             
             # Собираем также ТОП-3 для отладки
             top_results = results[:3]
+            
+            # Если у нескольких решений близкие оценки, предпочитаем то, где больше найдено полных слов
+            if len(results) >= 2 and abs(results[0][2] - results[1][2]) < 0.1:
+                if len(results[1][6]) > len(results[0][6]):
+                    best = results[1]
+                    best_width = best[0]
+                    best_route = best[1]
+                    best_score = best[2]
+                    found_words = best[6]
             
             return {
                 "best_width": best_width,
                 "best_route": best_route,
                 "best_score": best_score,
                 "top_results": top_results,
+                "found_words": found_words,
                 "message": f"Наилучшая ширина: {best_width}, маршрут: {best_route}, оценка: {best_score:.2f}"
             }
         else:
