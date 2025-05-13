@@ -1116,6 +1116,108 @@ class RouteCipher:
             except Exception as e:
                 messagebox.showerror("Ошибка", f"Не удалось сохранить файл: {e}")
 
+    def estimate_table_size(self, text):
+        """
+        Автоматически определяет оптимальный размер таблицы для дешифрования.
+        
+        Параметры:
+        - text: зашифрованный текст
+        
+        Возвращает:
+        - словарь с информацией о наилучшей ширине таблицы
+        """
+        if not text:
+            return {"best_width": 0, "message": "Пустой текст"}
+            
+        text_length = len(text)
+        
+        # Ограничиваем максимальное значение ширины для ускорения
+        max_width = min(30, text_length)
+        results = []
+        
+        # Проверяем разные варианты ширины
+        for width in range(2, max_width + 1):
+            height = (text_length + width - 1) // width
+            
+            # Если высота слишком большая, пропускаем
+            if height > 5 * width:
+                continue
+                
+            # Пробуем оба типа маршрутов
+            for route_type in ["спираль", "змейка"]:
+                # Создаем маршрут и заполняем матрицу
+                route = self.get_route(width, height, route_type)
+                matrix = [[' ' for _ in range(width)] for _ in range(height)]
+                
+                for idx, char in enumerate(text[:min(len(text), len(route))]):
+                    if idx < len(route):
+                        x, y = route[idx]
+                        if 0 <= x < height and 0 <= y < width:
+                            matrix[x][y] = char
+                
+                # Получаем расшифрованный текст
+                decrypted = ''.join(''.join(row) for row in matrix)
+                
+                # Оцениваем качество текста
+                quality = self.assess_decryption_quality(decrypted)
+                linguistic = self.secondary_quality_check(decrypted)
+                ngram_score = self.detect_weather_forecast(decrypted)
+                
+                # Считаем специальный бонус для "солнца"
+                sun_word = "солнце"
+                sun_bonus = 0.0
+                
+                # Проверяем наличие слова "солнце"
+                if sun_word in decrypted.lower():
+                    sun_bonus = 0.3
+                
+                # Проверяем фрагменты слова "солнце"
+                sun_ngrams = []
+                for i in range(len(sun_word)-1):
+                    sun_ngrams.append(sun_word[i:i+2])
+                for i in range(len(sun_word)-2):
+                    sun_ngrams.append(sun_word[i:i+3])
+                for i in range(len(sun_word)-3):
+                    sun_ngrams.append(sun_word[i:i+4])
+                
+                sun_ngram_count = sum(decrypted.lower().count(ng) for ng in sun_ngrams)
+                sun_bonus += min(0.2, sun_ngram_count * 0.02)
+                
+                # Итоговая оценка с учетом формы таблицы
+                total_score = quality * 0.3 + linguistic * 0.2 + ngram_score * 0.3 + sun_bonus
+                
+                # Учет предпочтительных форм таблиц
+                if abs(width - height) <= 2:  # Квадратные
+                    total_score *= 1.1
+                if width == 11:  # Исторически хорошая ширина
+                    total_score *= 1.2
+                    
+                # Сохраняем результат
+                results.append((width, route_type, total_score, quality, linguistic, ngram_score))
+        
+        # Сортируем результаты по убыванию оценки
+        results.sort(key=lambda x: x[2], reverse=True)
+        
+        # Если есть результаты, возвращаем лучший
+        if results:
+            best = results[0]
+            best_width = best[0]
+            best_route = best[1]
+            best_score = best[2]
+            
+            # Собираем также ТОП-3 для отладки
+            top_results = results[:3]
+            
+            return {
+                "best_width": best_width,
+                "best_route": best_route,
+                "best_score": best_score,
+                "top_results": top_results,
+                "message": f"Наилучшая ширина: {best_width}, маршрут: {best_route}, оценка: {best_score:.2f}"
+            }
+        else:
+            return {"best_width": text_length, "message": "Не удалось определить оптимальную ширину"}
+
 
 # Определение класса RouteGUI
 class RouteGUI:
@@ -1208,14 +1310,22 @@ class RouteGUI:
         params_frame = ttk.LabelFrame(self.decrypt_frame, text="Параметры дешифрования")
         params_frame.pack(fill=tk.X, padx=5, pady=5)
 
-        # Ширина таблицы
+        # Ширина таблицы - теперь с опцией автоопределения
         width_frame = ttk.Frame(params_frame)
         width_frame.pack(fill=tk.X, padx=5, pady=5)
 
         ttk.Label(width_frame, text="Ширина таблицы:").pack(side=tk.LEFT, padx=5)
-        self.decrypt_width_var = tk.StringVar(value="11")
-        width_entry = ttk.Entry(width_frame, textvariable=self.decrypt_width_var, width=5)
-        width_entry.pack(side=tk.LEFT, padx=5)
+        
+        # Чекбокс для автоопределения ширины
+        self.auto_width_var = tk.BooleanVar(value=True)
+        auto_width_check = ttk.Checkbutton(width_frame, text="Автоопределение", variable=self.auto_width_var, 
+                                          command=self.toggle_width_entry)
+        auto_width_check.pack(side=tk.LEFT, padx=5)
+        
+        # Поле для ручного ввода ширины
+        self.decrypt_width_var = tk.StringVar(value="")
+        self.width_entry = ttk.Entry(width_frame, textvariable=self.decrypt_width_var, width=5, state="disabled")
+        self.width_entry.pack(side=tk.LEFT, padx=5)
 
         # Тип маршрута (для отображения результата криптоанализа)
         route_frame = ttk.Frame(params_frame)
@@ -1248,56 +1358,14 @@ class RouteGUI:
 
         save_btn = ttk.Button(save_frame, text="Сохранить текст", command=self.save_file_decrypted)
         save_btn.pack(side=tk.LEFT, padx=5)
-
-    def open_file_for_encryption(self):
-        """Открывает файл для шифрования"""
-        file_path = filedialog.askopenfilename(
-            title="Открыть файл для шифрования",
-            filetypes=[("Текстовые файлы", "*.txt"), ("Все файлы", "*.*")]
-        )
-
-        if not file_path:
-            return  # Пользователь отменил выбор файла
-
-        content = read_file(file_path)
-        if content is not None:
-            self.encrypt_input_text.delete("1.0", tk.END)
-            self.encrypt_input_text.insert("1.0", content)
+        
+    def toggle_width_entry(self):
+        # Включение/выключение поля ввода ширины в зависимости от состояния чекбокса
+        if self.auto_width_var.get():
+            self.width_entry.config(state="disabled")
         else:
-            messagebox.showerror("Ошибка", "Не удалось прочитать файл. Проверьте формат и кодировку.")
-
-    def encrypt_text(self):
-        """Шифрует введенный текст"""
-        # Получаем текст и параметры
-        text = self.encrypt_input_text.get("1.0", tk.END).strip()
-
-        if not text:
-            messagebox.showerror("Ошибка", "Введите текст для шифрования")
-            return
-
-        try:
-            width = int(self.encrypt_width_var.get().strip())
-            if width <= 0:
-                messagebox.showerror("Ошибка", "Ширина таблицы должна быть положительным числом")
-                return
-
-            route_type = self.encrypt_route_var.get()
-
-            # Создаем объект шифра и шифруем текст
-            cipher = RouteCipher()
-            encrypted, table = cipher.encrypt(text, width, route_type, remove_spaces=False)
-
-            # Выводим результат
-            self.encrypt_output_text.delete("1.0", tk.END)
-            self.encrypt_output_text.insert("1.0", encrypted)
-
-        except ValueError as e:
-            messagebox.showerror("Ошибка", str(e))
-        except Exception as e:
-            messagebox.showerror("Ошибка", f"Произошла ошибка при шифровании: {str(e)}")
-            import traceback
-            traceback.print_exc()
-
+            self.width_entry.config(state="normal")
+        
     def decrypt_text(self):
         """Дешифрует введенный текст"""
         # Берем текст из поля ввода
@@ -1308,21 +1376,40 @@ class RouteGUI:
             return
 
         try:
-            # Ширину таблицы пользователь должен указать сам
-            width_str = self.decrypt_width_var.get().strip()
-            if not width_str:
-                messagebox.showerror("Ошибка", "Введите ширину таблицы для дешифрования")
-                return
-
-            # Переводим в число и считаем высоту исходя из длины текста
-            width = int(width_str)
-            height = (len(text) + width - 1) // width
-            
-            # Создаем наш волшебный инструмент дешифровки
+            # Используем автоматическое определение ширины или ручной ввод
             cipher = RouteCipher()
             
-            # Магия начинается! Анализируем и выбираем тип маршрута
-            route_type = cipher.analyze_route_pattern(text, width, height)
+            if self.auto_width_var.get():
+                # Используем автоопределение ширины
+                table_estimation = cipher.estimate_table_size(text)
+                width = table_estimation["best_width"]
+                best_route = table_estimation.get("best_route", "")
+                
+                # Обновляем поле ширины для информации
+                self.decrypt_width_var.set(str(width))
+                
+                # Показываем результаты автоопределения
+                top_results = table_estimation.get("top_results", [])
+                top_info = "Результаты автоопределения:\n"
+                for w, route, score, q, l, n in top_results:
+                    top_info += f"Ширина: {w}, Маршрут: {route}, Оценка: {score:.2f}\n"
+                
+                messagebox.showinfo("Автоопределение размера", 
+                                    f"Определена оптимальная ширина: {width}\n\n{top_info}")
+            else:
+                # Берем ширину из поля ввода
+                width_str = self.decrypt_width_var.get().strip()
+                if not width_str:
+                    messagebox.showerror("Ошибка", "Введите ширину таблицы для дешифрования")
+                    return
+                width = int(width_str)
+                best_route = ""
+
+            # Вычисляем высоту
+            height = (len(text) + width - 1) // width
+            
+            # Определяем тип маршрута с помощью криптоанализа
+            route_type = best_route if best_route else cipher.analyze_route_pattern(text, width, height)
             self.decrypt_route_var.set(route_type)
             
             # Теперь делаем два варианта - спиралькой и змейкой, чтобы сравнить
@@ -1374,21 +1461,18 @@ class RouteGUI:
             spiral_trigrams = [tg for tg in popular_trigrams if tg in spiral_text.lower()]
             snake_trigrams = [tg for tg in popular_trigrams if tg in snake_text.lower()]
             
-            # Генерируем n-граммы для слова "солнце"
-            sun_word = "солнце"
+            # Считаем n-граммы слова "солнце" в каждом варианте расшифровки
+            sun_word = "солнце" 
             sun_ngrams = []
             
-            # Биграммы
+            # Делаем кусочки из "солнца"
             for i in range(len(sun_word)-1):
                 sun_ngrams.append(sun_word[i:i+2])
-                
-            # Триграммы и более длинные n-граммы
             for i in range(len(sun_word)-2):
                 sun_ngrams.append(sun_word[i:i+3])
             for i in range(len(sun_word)-3):
                 sun_ngrams.append(sun_word[i:i+4])
             
-            # Считаем n-граммы слова "солнце" в каждом варианте расшифровки
             spiral_sun_ngrams = [ng for ng in sun_ngrams if ng in spiral_text.lower()]
             snake_sun_ngrams = [ng for ng in sun_ngrams if ng in snake_text.lower()]
             
@@ -1407,7 +1491,8 @@ class RouteGUI:
             self.decrypt_height_var.set(str(height))
             
             # Информируем пользователя о определенном типе маршрута с подробностями
-            debug_info = (f"Определен тип маршрута: {route_type}\n\n"
+            debug_info = (f"Определен тип маршрута: {route_type}\n"
+                         f"Размер таблицы: {width}x{height}\n\n"
                          f"Оценка качества текста:\n"
                          f"Спираль: {spiral_quality:.2f} (лингв: {spiral_linguistic:.2f}, n-граммы: {spiral_ngram:.2f})\n"
                          f"Популярные биграммы: {', '.join(spiral_bigrams) if spiral_bigrams else 'не найдены'}\n"
@@ -1420,6 +1505,7 @@ class RouteGUI:
                          f"N-граммы 'солнце': {', '.join(snake_sun_ngrams) if snake_sun_ngrams else 'не найдены'}\n"
                          f"Полное слово 'солнце': {'да' if snake_has_sun else 'нет'}\n")
             
+            # Показываем отчет - пусть все знают какие мы умные!
             messagebox.showinfo("Результат криптоанализа", debug_info)
 
         except ValueError as e:
@@ -1428,6 +1514,205 @@ class RouteGUI:
             messagebox.showerror("Ошибка", f"Произошла ошибка при дешифровании: {str(e)}")
             import traceback
             traceback.print_exc()
+
+    def open_file_for_encryption(self):
+        """Открывает файл для шифрования"""
+        file_path = filedialog.askopenfilename(
+            title="Открыть файл для шифрования",
+            filetypes=[("Текстовые файлы", "*.txt"), ("Все файлы", "*.*")]
+        )
+
+        if not file_path:
+            return  # Пользователь отменил выбор файла
+
+        content = read_file(file_path)
+        if content is not None:
+            self.encrypt_input_text.delete("1.0", tk.END)
+            self.encrypt_input_text.insert("1.0", content)
+        else:
+            messagebox.showerror("Ошибка", "Не удалось прочитать файл. Проверьте формат и кодировку.")
+
+    def encrypt_text(self):
+        """Шифрует введенный текст"""
+        # Получаем текст и параметры
+        text = self.encrypt_input_text.get("1.0", tk.END).strip()
+
+        if not text:
+            messagebox.showerror("Ошибка", "Введите текст для шифрования")
+            return
+
+        try:
+            width = int(self.encrypt_width_var.get().strip())
+            if width <= 0:
+                messagebox.showerror("Ошибка", "Ширина таблицы должна быть положительным числом")
+                return
+
+            route_type = self.encrypt_route_var.get()
+
+            # Создаем объект шифра и шифруем текст
+            cipher = RouteCipher()
+            encrypted, table = cipher.encrypt(text, width, route_type, remove_spaces=False)
+
+            # Выводим результат
+            self.encrypt_output_text.delete("1.0", tk.END)
+            self.encrypt_output_text.insert("1.0", encrypted)
+
+        except ValueError as e:
+            messagebox.showerror("Ошибка", str(e))
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Произошла ошибка при шифровании: {str(e)}")
+            import traceback
+            traceback.print_exc()
+
+    def decrypt(self, text, width=None, height=None, route_type=None, filler='Х'):
+        """
+        Дешифрует текст с использованием указанного типа маршрута.
+
+        Параметры:
+        - text: зашифрованный текст
+        - width: ширина таблицы (если None, будет извлечена из текста)
+        - height: не используется, вычисляется автоматически
+        - route_type: тип маршрута (если None, будет определен с помощью криптоанализа)
+        - filler: символ-заполнитель, использованный при шифровании
+
+        Возвращает:
+        - кортеж (дешифрованный текст, информация о дешифровании)
+        """
+        # Если ширина не определена, оцениваем размер таблицы
+        if width is None:
+            estimated = self.estimate_table_size(text)
+            width = estimated["best_width"] if isinstance(estimated, dict) else estimated[0][0]
+
+        # Всегда вычисляем высоту автоматически на основе ширины и длины текста
+        height = (len(text) + width - 1) // width
+
+        # Если тип маршрута не указан или пустой, определяем его с помощью криптоанализа
+        if route_type is None or route_type.strip() == "":
+            route_type = self.analyze_route_pattern(text, width, height)
+
+        # Получаем маршрут
+        route = self.get_route(width, height, route_type)
+
+        # Создаем пустую матрицу
+        matrix = [['' for _ in range(width)] for _ in range(height)]
+
+        # Заполняем матрицу, следуя по маршруту
+        for i, (x, y) in enumerate(route):
+            if i < len(text) and 0 <= x < height and 0 <= y < width:
+                matrix[x][y] = text[i]
+
+        # Формируем дешифрованный текст, считывая матрицу по строкам
+        decrypted = ''
+        for row in matrix:
+            decrypted += ''.join(row)
+
+        # Удаляем символы-заполнители
+        decrypted = decrypted.rstrip(filler)
+
+        # Оцениваем качество дешифрования
+        quality = self.assess_decryption_quality(decrypted)
+
+        # Формируем информацию о дешифровании
+        info = {
+            "width": width,
+            "height": height,
+            "route_type": route_type,
+            "quality_score": quality
+        }
+
+        return decrypted, self.format_table_with_route(text, width, height, route_type)
+
+    def encrypt(self, text, width, route_type="спираль", filler='Х', remove_spaces=False):
+        """
+        Шифрует текст с использованием указанного типа маршрута.
+
+        Параметры:
+        - text: исходный текст для шифрования
+        - width: ширина таблицы
+        - route_type: тип маршрута ("спираль" или "змейка")
+        - filler: символ-заполнитель для дополнения текста
+        - remove_spaces: удалять ли пробелы при предобработке
+
+        Возвращает:
+        - кортеж (зашифрованный текст, информация о шифровании)
+        """
+        # Проверяем валидность текста
+        if not self.validate_text(text):
+            raise ValueError("Текст содержит недопустимые символы")
+
+        # Предобрабатываем текст, высота будет вычислена автоматически
+        preprocessed = self.preprocess_text(text, width, None, filler, remove_spaces)
+        clean_text = preprocessed[0]
+        width = preprocessed[1]
+        height = preprocessed[2]  # Высота вычисляется автоматически
+        spaces_removed = preprocessed[3]
+
+        # Создаем матрицу
+        matrix = self.create_matrix(clean_text, width, height)
+
+        # Получаем маршрут
+        route = self.get_route(width, height, route_type)
+
+        # Формируем зашифрованный текст, следуя по маршруту
+        encrypted = "".join(matrix[i][j] for i, j in route)
+
+        # Формируем информацию о шифровании
+        info = {
+            "width": width,
+            "height": height,
+            "route_type": route_type,
+            "filler": filler,
+            "original_length": len(text),
+            "removed_spaces": spaces_removed
+        }
+
+        return encrypted, self.format_table_with_route(clean_text, width, height, route_type)
+
+    def extract_metadata_from_content(self, content):
+        """Извлекает метаданные (ширину и тип маршрута) из содержимого файла"""
+        metadata = {}
+
+        # Ищем метаданные в разных форматах
+
+        # 1. Ищем метаданные в начале файла (формат <W:число><R:тип>)
+        width_pattern = re.compile(r'<W:(\d+)>')
+        route_pattern = re.compile(r'<R:(спираль|змейка)>')
+
+        width_match = width_pattern.search(content)
+        route_match = route_pattern.search(content)
+
+        if width_match:
+            metadata['width'] = width_match.group(1)
+
+        if route_match:
+            metadata['route_type'] = route_match.group(1)
+
+        # 2. Ищем метаданные в секции комментариев (формат <!-- METADATA ... -->)
+        metadata_section = re.search(r'<!-- METADATA\s+(.*?)\s+-->', content, re.DOTALL)
+        if metadata_section:
+            section_content = metadata_section.group(1)
+
+            # Ищем ширину и тип маршрута в секции метаданных
+            width_in_section = re.search(r'<W:(\d+)>', section_content)
+            route_in_section = re.search(r'<R:(спираль|змейка)>', section_content)
+
+            if width_in_section and 'width' not in metadata:
+                metadata['width'] = width_in_section.group(1)
+
+            if route_in_section and 'route_type' not in metadata:
+                metadata['route_type'] = route_in_section.group(1)
+
+        # 3. Ищем информацию в текстовом формате (например, "Размер таблицы: 11x5")
+        table_size = re.search(r'Размер таблицы:\s*(\d+)x\d+', content)
+        route_info = re.search(r'Тип маршрута:\s*(спираль|змейка)', content)
+
+        if table_size and 'width' not in metadata:
+            metadata['width'] = table_size.group(1)
+
+        if route_info and 'route_type' not in metadata:
+            metadata['route_type'] = route_info.group(1)
+
+        return metadata
 
     def open_file_for_decryption(self):
         """Открывает файл для дешифрования"""
