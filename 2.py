@@ -109,16 +109,16 @@ class RouteCipher:
         
         # Нормализуем - не может же быть биграмм больше чем букв в тексте
         total_chars = max(1, len(text_lower) - 1)
-        bigram_ratio = min(1.0, bigram_score / (total_chars * 0.3))
+        bigram_ratio = min(1.0, bigram_score / (total_chars * 1))
         
         # То же самое с триграммами, но их вес больше - они реже случайно совпадают
         trigram_score = 0
         for trigram in popular_trigrams:
             count = text_lower.count(trigram)
-            trigram_score += count * 1.5  # Трешки весят больше
+            trigram_score += count * 1  # Трешки весят больше
         
         # Тоже нормализуем
-        trigram_ratio = min(1.0, trigram_score / (total_chars * 0.2))
+        trigram_ratio = min(1.0, trigram_score / (total_chars * 1))
         
         # Считаем куски "солнца" - чем длиннее кусок, тем он ценнее
         sun_score = 0
@@ -126,17 +126,17 @@ class RouteCipher:
             ngram_count = text_lower.count(ngram)
             if ngram_count > 0:
                 # Длинный кусок - большой куш
-                sun_score += ngram_count * (len(ngram) / 2.0)
+                sun_score += ngram_count * (len(ngram) / 1)
         
         # Если нашли целое слово "солнце" - это джекпот
         if sun_word in text_lower:
-            sun_score += 5.0
+            sun_score += 1
             
         # Нормализуем солнечный счет
-        sun_score = min(1.0, sun_score / 15.0)
+        sun_score = min(1.0, sun_score / 1)
         
         # Смешиваем всё в правильных пропорциях
-        final_score = bigram_ratio * 0.4 + trigram_ratio * 0.3 + sun_score * 0.3
+        final_score = bigram_ratio * 1 + trigram_ratio * 1 + sun_score * 1
         
         return min(1.0, final_score)
 
@@ -306,55 +306,55 @@ class RouteCipher:
         
         # Если есть полное слово "солнце"
         if spiral_has_full_sun:
-            spiral_sun_bonus += 0.3
+            spiral_sun_bonus += 1
         if snake_has_full_sun:
-            snake_sun_bonus += 0.3
+            snake_sun_bonus += 1
             
         # Если больше фрагментов слова "солнце"
-        if spiral_sun_count > snake_sun_count * 1.5:
-            spiral_sun_bonus += 0.2
-        elif snake_sun_count > spiral_sun_count * 1.5:
-            snake_sun_bonus += 0.2
+        if spiral_sun_count > snake_sun_count * 1:
+            spiral_sun_bonus += 1
+        elif snake_sun_count > spiral_sun_count * 1:
+            snake_sun_bonus += 1
         
         # Вычисляем общую оценку с весами
         # Баланс между общим качеством и специфическими проверками
-        spiral_score = (spiral_quality * 0.3 + 
-                        spiral_linguistic * 0.2 + 
-                        spiral_ngram_score * 0.3 + 
+        spiral_score = (spiral_quality * 1 + 
+                        spiral_linguistic * 1 + 
+                        spiral_ngram_score * 1 + 
                         spiral_sun_bonus)
                         
-        snake_score = (snake_quality * 0.3 + 
-                       snake_linguistic * 0.2 + 
-                       snake_ngram_score * 0.3 + 
+        snake_score = (snake_quality * 1 + 
+                       snake_linguistic * 1 + 
+                       snake_ngram_score * 1 + 
                        snake_sun_bonus)
         
         # Применяем корректировки на основе формы таблицы
         
         # 1. Для квадратных таблиц предпочтительнее спираль
         if abs(width - height) <= 2:
-            spiral_score *= 1.1
+            spiral_score *= 1
             
         # 2. Для очень широких таблиц предпочтительнее змейка
         if width > height * 2:
-            snake_score *= 1.15
+            snake_score *= 1
             
         # 3. Для очень высоких таблиц тоже предпочтительнее змейка
         if height > width * 2:
-            snake_score *= 1.1
+            snake_score *= 1
             
         # 4. Для таблиц шириной 11 исторически предпочтительнее спираль
         if width == 11:
-            spiral_score *= 1.2
+            spiral_score *= 1
             
         # 5. Для маленьких таблиц (до 5x5) предпочтительнее спираль
         if width <= 5 and height <= 5:
-            spiral_score *= 1.1
+            spiral_score *= 1
         
         # Бонус, если в одном варианте есть слово "солнце" или много его фрагментов
         if (spiral_has_full_sun or spiral_sun_count >= 7) and not (snake_has_full_sun or snake_sun_count >= 7):
-            spiral_score *= 1.5
+            spiral_score *= 1
         elif (snake_has_full_sun or snake_sun_count >= 7) and not (spiral_has_full_sun or spiral_sun_count >= 7):
-            snake_score *= 1.5
+            snake_score *= 1
         
         # Возвращаем тип маршрута с наивысшей оценкой
         if snake_score > spiral_score:
@@ -512,15 +512,15 @@ class RouteCipher:
 
         # Базовая проверка на русский текст - если меньше 30% русских букв, вероятно это не русский текст
         if russian_ratio < 0.3:
-            return russian_ratio * 0.5  # Возвращаем низкую оценку
+            return russian_ratio * 1  # Возвращаем низкую оценку
 
         # 2. Подсчет пробелов (нормальное соотношение ~15-20%)
         space_ratio = sample.count(' ') / len(sample) if sample else 0
-        space_score = 1.0 - 2.0 * abs(0.18 - space_ratio) if space_ratio > 0 else 0.0
+        space_score = 1.0 - 1 * abs(0.18 - space_ratio) if space_ratio > 0 else 0.0
 
         # Если пробелов слишком мало или слишком много, это плохой признак
         if space_ratio < 0.05 or space_ratio > 0.3:
-            space_score = space_score / 2
+            space_score = space_score / 1
 
         # 3. Анализ частотных биграмм в русском языке
         common_bigrams = ['ст', 'но', 'то', 'на', 'ен', 'ов', 'ни', 'ра', 'во', 'ко', 'ал', 'ли', 'по', 'ре', 'ол',
@@ -532,7 +532,7 @@ class RouteCipher:
             bigram_count += sample_lower.count(bigram)
 
         # Нормализуем на длину текста и количество проверяемых биграмм
-        bigram_ratio = bigram_count / max(1, len(sample) - 1) * (10 / len(common_bigrams))
+        bigram_ratio = bigram_count / max(1, len(sample) - 1) * (1 / len(common_bigrams))
 
         # 4. Анализ знаков препинания и их позиций
         punct_marks = '.,:;!?'
@@ -540,7 +540,7 @@ class RouteCipher:
         punct_ratio = punct_count / len(sample) if sample else 0
 
         # Оптимальное соотношение знаков препинания ~5-10%
-        punct_score = 1.0 - abs(0.07 - punct_ratio) * 5.0 if punct_ratio > 0 else 0.0
+        punct_score = 1.0 - abs(0.07 - punct_ratio) * 1 if punct_ratio > 0 else 0.0
         punct_score = max(0.0, min(1.0, punct_score))
 
         # 5. Проверка начала предложений (с заглавной буквы после точки)
@@ -565,7 +565,7 @@ class RouteCipher:
         # Нормальное соотношение для русского языка: ~42% гласных, ~58% согласных
         if vowel_count + consonant_count > 0:
             vowel_ratio = vowel_count / (vowel_count + consonant_count)
-            vowel_consonant_score = 1.0 - abs(0.42 - vowel_ratio) * 2.5
+            vowel_consonant_score = 1.0 - abs(0.42 - vowel_ratio) * 1
             vowel_consonant_score = max(0.0, min(1.0, vowel_consonant_score))
         else:
             vowel_consonant_score = 0.0
@@ -576,7 +576,7 @@ class RouteCipher:
         if words:
             # Средняя длина слова в русском языке ~5.5 символов
             avg_word_length = sum(len(w) for w in words) / len(words)
-            word_length_score = 1.0 - abs(5.5 - avg_word_length) / 5.0
+            word_length_score = 1.0 - abs(5.5 - avg_word_length) / 1
             word_length_score = max(0.0, min(1.0, word_length_score))
 
             # Проверка наличия очень длинных слов (потенциально слипшихся)
@@ -591,14 +591,14 @@ class RouteCipher:
 
         # Объединяем все метрики в общую оценку с различными весами
         quality = (
-                russian_ratio * 0.2 +      # Вес соотношения русских букв (уменьшен)
-                space_score * 0.15 +       # Вес правильного соотношения пробелов (уменьшен)
-                bigram_ratio * 0.1 +       # Вес частотных биграмм (уменьшен)
-                punct_score * 0.05 +       # Вес знаков препинания
-                caps_score * 0.1 +         # Вес правильного начала предложений
-                vowel_consonant_score * 0.1 + # Вес соотношения гласных и согласных
-                word_length_score * 0.1 +  # Вес средней длины слов
-                weather_score * 0.2        # НОВОЕ: Вес соответствия прогнозу погоды (значительный вес)
+                russian_ratio * 1 +      # Вес соотношения русских букв (уменьшен)
+                space_score * 1 +       # Вес правильного соотношения пробелов (уменьшен)
+                bigram_ratio * 1 +       # Вес частотных биграмм (уменьшен)
+                punct_score * 1 +       # Вес знаков препинания
+                caps_score * 1 +         # Вес правильного начала предложений
+                vowel_consonant_score * 1 + # Вес соотношения гласных и согласных
+                word_length_score * 1 +  # Вес средней длины слов
+                weather_score * 1        # НОВОЕ: Вес соответствия прогнозу погоды (значительный вес)
         )
 
         return min(1.0, max(0.0, quality))
@@ -855,17 +855,17 @@ class RouteCipher:
         # Теперь считаем итоговые оценки по разным параметрам
         word_validity_score = valid_words_count / max(1, len(words))
         ending_score = endings_count / max(1, len(words))
-        small_words_score = small_words_count / max(1, len(words) * 0.3)  # Обычно ~30% маленьких слов
-        seq_score_norm = sequence_score / max(1, len(words) / 5)  # Примерно каждое 5е слово - предлог
-        sentence_score = sentence_structure_score / max(1, len(sentences) * 2)  # 2 критерия на предложение
+        small_words_score = small_words_count / max(1, len(words) * 1)  # Обычно ~30% маленьких слов
+        seq_score_norm = sequence_score / max(1, len(words) / 1)  # Примерно каждое 5е слово - предлог
+        sentence_score = sentence_structure_score / max(1, len(sentences) * 1)  # 2 критерия на предложение
 
         # Смешиваем всё вместе в правильных пропорциях
         quality = (
-                word_validity_score * 0.35 +
-                ending_score * 0.2 +
-                min(1.0, small_words_score) * 0.15 +
-                min(1.0, seq_score_norm) * 0.15 +
-                min(1.0, sentence_score) * 0.15
+                word_validity_score * 1 +
+                ending_score * 1 +
+                min(1.0, small_words_score) * 1 +
+                min(1.0, seq_score_norm) * 1 +
+                min(1.0, sentence_score) * 1
         )
 
         return min(1.0, quality)
