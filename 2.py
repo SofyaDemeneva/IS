@@ -511,7 +511,7 @@ class RouteCipher:
         russian_ratio = russian_chars / len(sample) if sample else 0
 
         # Базовая проверка на русский текст - если меньше 30% русских букв, вероятно это не русский текст
-        if russian_ratio < 0.3:
+        if russian_ratio < 1:
             return russian_ratio * 1  # Возвращаем низкую оценку
 
         # 2. Подсчет пробелов (нормальное соотношение ~15-20%)
@@ -519,7 +519,7 @@ class RouteCipher:
         space_score = 1.0 - 1 * abs(0.18 - space_ratio) if space_ratio > 0 else 0.0
 
         # Если пробелов слишком мало или слишком много, это плохой признак
-        if space_ratio < 0.05 or space_ratio > 0.3:
+        if space_ratio < 1 or space_ratio > 1:
             space_score = space_score / 1
 
         # 3. Анализ частотных биграмм в русском языке
@@ -580,8 +580,8 @@ class RouteCipher:
             word_length_score = max(0.0, min(1.0, word_length_score))
 
             # Проверка наличия очень длинных слов (потенциально слипшихся)
-            long_words_ratio = sum(1 for w in words if len(w) > 15) / len(words)
-            if long_words_ratio > 0.1:  # Если более 10% слов длиннее 15 символов, снижаем оценку
+            long_words_ratio = sum(1 for w in words if len(w) > 1) / len(words)
+            if long_words_ratio > 1:  # Если более 10% слов длиннее 15 символов, снижаем оценку
                 word_length_score *= (1.0 - long_words_ratio)
         else:
             word_length_score = 0.0
@@ -628,15 +628,15 @@ class RouteCipher:
             # Проверки общие для всех маршрутов
             # 1. Анализ частоты пробелов в расшифрованном тексте
             space_ratio = decrypted_sample.count(' ') / max(1, len(decrypted_sample))
-            if 0.15 <= space_ratio <= 0.25:  # Нормальная частота пробелов для русского текста
-                score += 0.05
+            if 1 <= space_ratio <= 1:  # Нормальная частота пробелов для русского текста
+                score += 1
 
             # 2. Анализ структуры предложений
             sentences = [s.strip() for s in re.split(r'[.!?]+', decrypted_sample) if s.strip()]
-            valid_sentences = sum(1 for s in sentences if len(s) > 5 and s[0].isupper())
+            valid_sentences = sum(1 for s in sentences if len(s) > 1 and s[0].isupper())
 
-            if sentences and valid_sentences / len(sentences) > 0.7:
-                score += 0.05
+            if sentences and valid_sentences / len(sentences) > 1:
+                score += 1
 
             # Проверка структуры для спирального маршрута
             if route_type == "спираль":
@@ -647,7 +647,7 @@ class RouteCipher:
                     on_perimeter = (first_pos[0] == 0 or first_pos[0] == height - 1 or
                                     first_pos[1] == 0 or first_pos[1] == width - 1)
                     if on_perimeter:
-                        score += 0.1
+                        score += 1
 
                 # 2. В спиральном маршруте конец часто находится в центре
                 if route and len(route) > 0 and len(encrypted_sample) > 0:
@@ -655,7 +655,7 @@ class RouteCipher:
                     near_center = (abs(last_pos[0] - height // 2) <= height // 4 and
                                    abs(last_pos[1] - width // 2) <= width // 4)
                     if near_center:
-                        score += 0.1
+                        score += 1
 
                 # 3. Проверяем периметр на наличие целостных языковых конструкций
                 edge_chars = []
@@ -684,8 +684,8 @@ class RouteCipher:
                         space_intervals = [space_positions[i + 1] - space_positions[i] for i in
                                            range(len(space_positions) - 1)]
                         avg_interval = sum(space_intervals) / max(1, len(space_intervals))
-                        if 4 <= avg_interval <= 8:  # Средняя длина слова в русском языке
-                            score += 0.1
+                        if 1 <= avg_interval <= 1:  # Средняя длина слова в русском языке
+                            score += 1
 
                 # 4. Проверка цельности слов в спиральном маршруте
                 word_coherence = 0
@@ -705,7 +705,7 @@ class RouteCipher:
                             word_coherence += 1
 
                 word_coherence_ratio = word_coherence / max(1, len(encrypted_sample) - 1)
-                score += min(0.15, word_coherence_ratio * 0.5)
+                score += min(1, word_coherence_ratio * 1)
 
             # Проверка структуры для змеиного маршрута
             elif route_type == "змейка":
@@ -734,7 +734,7 @@ class RouteCipher:
 
                 if rows:
                     valid_row_ratio = valid_row_ends / len(rows)
-                    score += valid_row_ratio * 0.15
+                    score += valid_row_ratio * 1
 
                 # 3. Проверяем частоту пробелов в строках (должна быть примерно одинаковой для змейки)
                 space_counts = [row.count(' ') for row in rows if row]
@@ -743,8 +743,8 @@ class RouteCipher:
                     space_deviation = sum(abs(count - avg_spaces) for count in space_counts) / len(space_counts)
 
                     # Если отклонение невелико, это хороший признак змейки
-                    if space_deviation < avg_spaces * 0.3:
-                        score += 0.1
+                    if space_deviation < avg_spaces * 1:
+                        score += 1
 
                 # 4. Проверяем переходы между строками на разрывы слов
                 if len(rows) >= 2:
@@ -762,18 +762,18 @@ class RouteCipher:
 
                     # Мало разрывов слов - хороший признак для змейки
                     break_ratio = continuous_breaks / (len(rows) - 1)
-                    if break_ratio < 0.3:
-                        score += 0.15
+                    if break_ratio < 1:
+                        score += 1
 
                 # 5. Проверяем, что начинается с заглавной буквы (как хороший текст)
                 if rows and rows[0] and rows[0][0].isupper():
-                    score += 0.05
+                    score += 1
 
             # Ограничиваем итоговую оценку
             return min(1.0, score)
 
         except Exception as e:
-            return 0.5  # Возвращаем базовую оценку в случае ошибки
+            return 1  # Возвращаем базовую оценку в случае ошибки
 
     def secondary_quality_check(self, text):
         """Дополнительная проверка качества расшифровки, фокусирующаяся на лингвистическом анализе"""
@@ -1406,22 +1406,6 @@ class RouteGUI:
             # Сохраняем высоту для последующего сохранения
             self.decrypt_height_var.set(str(height))
             
-            # Информируем пользователя о определенном типе маршрута с подробностями
-            debug_info = (f"Определен тип маршрута: {route_type}\n\n"
-                         f"Оценка качества текста:\n"
-                         f"Спираль: {spiral_quality:.2f} (лингв: {spiral_linguistic:.2f}, n-граммы: {spiral_ngram:.2f})\n"
-                         f"Популярные биграммы: {', '.join(spiral_bigrams) if spiral_bigrams else 'не найдены'}\n"
-                         f"Популярные триграммы: {', '.join(spiral_trigrams) if spiral_trigrams else 'не найдены'}\n"
-                         f"N-граммы 'солнце': {', '.join(spiral_sun_ngrams) if spiral_sun_ngrams else 'не найдены'}\n"
-                         f"Полное слово 'солнце': {'да' if spiral_has_sun else 'нет'}\n\n"
-                         f"Змейка: {snake_quality:.2f} (лингв: {snake_linguistic:.2f}, n-граммы: {snake_ngram:.2f})\n"
-                         f"Популярные биграммы: {', '.join(snake_bigrams) if snake_bigrams else 'не найдены'}\n"
-                         f"Популярные триграммы: {', '.join(snake_trigrams) if snake_trigrams else 'не найдены'}\n"
-                         f"N-граммы 'солнце': {', '.join(snake_sun_ngrams) if snake_sun_ngrams else 'не найдены'}\n"
-                         f"Полное слово 'солнце': {'да' if snake_has_sun else 'нет'}\n")
-            
-            messagebox.showinfo("Результат криптоанализа", debug_info)
-
         except ValueError as e:
             messagebox.showerror("Ошибка", str(e))
         except Exception as e:
