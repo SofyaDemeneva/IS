@@ -1325,6 +1325,44 @@ class RouteGUI:
             route_type = cipher.analyze_route_pattern(text, width, height)
             self.decrypt_route_var.set(route_type)
             
+            # Теперь делаем два варианта - спиралькой и змейкой, чтобы сравнить
+            spiral_route = cipher.spiral_route(width, height)
+            snake_route = cipher.snake_route(width, height)
+            
+            # Пустые матрицы для заполнения
+            spiral_matrix = [[' ' for _ in range(width)] for _ in range(height)]
+            snake_matrix = [[' ' for _ in range(width)] for _ in range(height)]
+            
+            # Заполняем матрицы буквами из шифротекста
+            for i, char in enumerate(text):
+                # Спиральный вариант
+                if i < len(spiral_route):
+                    x, y = spiral_route[i]
+                    if 0 <= x < height and 0 <= y < width:
+                        spiral_matrix[x][y] = char
+                
+                # Змеиный вариант
+                if i < len(snake_route):
+                    x, y = snake_route[i]
+                    if 0 <= x < height and 0 <= y < width:
+                        snake_matrix[x][y] = char
+            
+            # Склеиваем все строки в единый текст
+            spiral_text = ''.join(''.join(row) for row in spiral_matrix)
+            snake_text = ''.join(''.join(row) for row in snake_matrix)
+            
+            # Проверяем качество текстов - какой больше похож на нормальный
+            spiral_quality = cipher.assess_decryption_quality(spiral_text)
+            snake_quality = cipher.assess_decryption_quality(snake_text)
+            
+            # Еще одна проверка - лингвистический анализ
+            spiral_linguistic = cipher.secondary_quality_check(spiral_text)
+            snake_linguistic = cipher.secondary_quality_check(snake_text)
+            
+            # И проверка на распространенные n-граммы
+            spiral_ngram = cipher.detect_weather_forecast(spiral_text)
+            snake_ngram = cipher.detect_weather_forecast(snake_text)
+            
             # Дешифруем текст с определенным типом маршрута
             decrypted, table = cipher.decrypt(text, width, route_type=route_type)
 
