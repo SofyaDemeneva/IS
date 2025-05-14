@@ -1325,77 +1325,6 @@ class RouteGUI:
             route_type = cipher.analyze_route_pattern(text, width, height)
             self.decrypt_route_var.set(route_type)
             
-            # Теперь делаем два варианта - спиралькой и змейкой, чтобы сравнить
-            spiral_route = cipher.spiral_route(width, height)
-            snake_route = cipher.snake_route(width, height)
-            
-            # Пустые матрицы для заполнения
-            spiral_matrix = [[' ' for _ in range(width)] for _ in range(height)]
-            snake_matrix = [[' ' for _ in range(width)] for _ in range(height)]
-            
-            # Заполняем матрицы буквами из шифротекста
-            for i, char in enumerate(text):
-                # Спиральный вариант
-                if i < len(spiral_route):
-                    x, y = spiral_route[i]
-                    if 0 <= x < height and 0 <= y < width:
-                        spiral_matrix[x][y] = char
-                
-                # Змеиный вариант
-                if i < len(snake_route):
-                    x, y = snake_route[i]
-                    if 0 <= x < height and 0 <= y < width:
-                        snake_matrix[x][y] = char
-            
-            # Склеиваем все строки в единый текст
-            spiral_text = ''.join(''.join(row) for row in spiral_matrix)
-            snake_text = ''.join(''.join(row) for row in snake_matrix)
-            
-            # Проверяем качество текстов - какой больше похож на нормальный
-            spiral_quality = cipher.assess_decryption_quality(spiral_text)
-            snake_quality = cipher.assess_decryption_quality(snake_text)
-            
-            # Еще одна проверка - лингвистический анализ
-            spiral_linguistic = cipher.secondary_quality_check(spiral_text)
-            snake_linguistic = cipher.secondary_quality_check(snake_text)
-            
-            # И проверка на распространенные n-граммы
-            spiral_ngram = cipher.detect_weather_forecast(spiral_text)
-            snake_ngram = cipher.detect_weather_forecast(snake_text)
-            
-            # Список частых биграмм и триграмм для демонстрации
-            popular_bigrams = ['ст', 'но', 'то', 'на', 'ен', 'ов', 'ни', 'ра', 'во']
-            popular_trigrams = ['ост', 'ого', 'ени', 'ста', 'про', 'ная']
-            
-            # Считаем популярные n-граммы в каждом варианте
-            spiral_bigrams = [bg for bg in popular_bigrams if bg in spiral_text.lower()]
-            snake_bigrams = [bg for bg in popular_bigrams if bg in snake_text.lower()]
-            
-            spiral_trigrams = [tg for tg in popular_trigrams if tg in spiral_text.lower()]
-            snake_trigrams = [tg for tg in popular_trigrams if tg in snake_text.lower()]
-            
-            # Генерируем n-граммы для слова "солнце"
-            sun_word = "солнце"
-            sun_ngrams = []
-            
-            # Биграммы
-            for i in range(len(sun_word)-1):
-                sun_ngrams.append(sun_word[i:i+2])
-                
-            # Триграммы и более длинные n-граммы
-            for i in range(len(sun_word)-2):
-                sun_ngrams.append(sun_word[i:i+3])
-            for i in range(len(sun_word)-3):
-                sun_ngrams.append(sun_word[i:i+4])
-            
-            # Считаем n-граммы слова "солнце" в каждом варианте расшифровки
-            spiral_sun_ngrams = [ng for ng in sun_ngrams if ng in spiral_text.lower()]
-            snake_sun_ngrams = [ng for ng in sun_ngrams if ng in snake_text.lower()]
-            
-            # Проверяем полное слово
-            spiral_has_sun = sun_word in spiral_text.lower()
-            snake_has_sun = sun_word in snake_text.lower()
-            
             # Дешифруем текст с определенным типом маршрута
             decrypted, table = cipher.decrypt(text, width, route_type=route_type)
 
@@ -1405,23 +1334,6 @@ class RouteGUI:
             
             # Сохраняем высоту для последующего сохранения
             self.decrypt_height_var.set(str(height))
-            
-            # Информируем пользователя о определенном типе маршрута с подробностями
-            debug_info = (f"Определен тип маршрута: {route_type}\n\n"
-                         f"Оценка качества текста:\n"
-                         f"Спираль: {spiral_quality:.2f} (лингв: {spiral_linguistic:.2f}, n-граммы: {spiral_ngram:.2f})\n"
-                         f"Популярные биграммы: {', '.join(spiral_bigrams) if spiral_bigrams else 'не найдены'}\n"
-                         f"Популярные триграммы: {', '.join(spiral_trigrams) if spiral_trigrams else 'не найдены'}\n"
-                         f"N-граммы 'солнце': {', '.join(spiral_sun_ngrams) if spiral_sun_ngrams else 'не найдены'}\n"
-                         f"Полное слово 'солнце': {'да' if spiral_has_sun else 'нет'}\n\n"
-                         f"Змейка: {snake_quality:.2f} (лингв: {snake_linguistic:.2f}, n-граммы: {snake_ngram:.2f})\n"
-                         f"Популярные биграммы: {', '.join(snake_bigrams) if snake_bigrams else 'не найдены'}\n"
-                         f"Популярные триграммы: {', '.join(snake_trigrams) if snake_trigrams else 'не найдены'}\n"
-                         f"N-граммы 'солнце': {', '.join(snake_sun_ngrams) if snake_sun_ngrams else 'не найдены'}\n"
-                         f"Полное слово 'солнце': {'да' if snake_has_sun else 'нет'}\n")
-            
-            # Удаляем вывод информационного сообщения
-            # messagebox.showinfo("Результат криптоанализа", debug_info)
 
         except ValueError as e:
             messagebox.showerror("Ошибка", str(e))
@@ -1429,23 +1341,6 @@ class RouteGUI:
             messagebox.showerror("Ошибка", f"Произошла ошибка при дешифровании: {str(e)}")
             import traceback
             traceback.print_exc()
-
-    def open_file_for_decryption(self):
-        """Открывает файл для дешифрования"""
-        file_path = filedialog.askopenfilename(
-            title="Открыть файл для дешифрования",
-            filetypes=[("Текстовые файлы", "*.txt"), ("Все файлы", "*.*")]
-        )
-
-        if not file_path:
-            return  # Пользователь отменил выбор файла
-
-        content = read_file(file_path)
-        if content is not None:
-            self.decrypt_input_text.delete("1.0", tk.END)
-            self.decrypt_input_text.insert("1.0", content)
-        else:
-            messagebox.showerror("Ошибка", "Не удалось прочитать файл. Проверьте формат и кодировку.")
 
     def save_file_encrypted(self):
         """Сохраняет зашифрованный текст в файл"""
