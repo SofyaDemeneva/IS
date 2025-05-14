@@ -130,7 +130,7 @@ class RouteCipher:
         
         # Если нашли целое слово "солнце" - это джекпот
         if sun_word in text_lower:
-            sun_score += 1
+            sun_score += 1.0
             
         # Нормализуем солнечный счет
         sun_score = min(1.0, sun_score / 1)
@@ -591,14 +591,14 @@ class RouteCipher:
 
         # Объединяем все метрики в общую оценку с различными весами
         quality = (
-                russian_ratio * 1 +      # Вес соотношения русских букв (уменьшен)
-                space_score * 1 +       # Вес правильного соотношения пробелов (уменьшен)
-                bigram_ratio * 1 +       # Вес частотных биграмм (уменьшен)
+                russian_ratio * 1 +      # Вес соотношения русских букв
+                space_score * 1 +       # Вес правильного соотношения пробелов
+                bigram_ratio * 1 +       # Вес частотных биграмм
                 punct_score * 1 +       # Вес знаков препинания
                 caps_score * 1 +         # Вес правильного начала предложений
                 vowel_consonant_score * 1 + # Вес соотношения гласных и согласных
                 word_length_score * 1 +  # Вес средней длины слов
-                weather_score * 1        # НОВОЕ: Вес соответствия прогнозу погоды (значительный вес)
+                weather_score * 1        # Вес соответствия прогнозу погоды
         )
 
         return min(1.0, max(0.0, quality))
@@ -1363,6 +1363,39 @@ class RouteGUI:
             spiral_ngram = cipher.detect_weather_forecast(spiral_text)
             snake_ngram = cipher.detect_weather_forecast(snake_text)
             
+            # Список частых биграмм и триграмм для демонстрации
+            popular_bigrams = ['ст', 'но', 'то', 'на', 'ен', 'ов', 'ни', 'ра', 'во']
+            popular_trigrams = ['ост', 'ого', 'ени', 'ста', 'про', 'ная']
+            
+            # Считаем популярные n-граммы в каждом варианте
+            spiral_bigrams = [bg for bg in popular_bigrams if bg in spiral_text.lower()]
+            snake_bigrams = [bg for bg in popular_bigrams if bg in snake_text.lower()]
+            
+            spiral_trigrams = [tg for tg in popular_trigrams if tg in spiral_text.lower()]
+            snake_trigrams = [tg for tg in popular_trigrams if tg in snake_text.lower()]
+            
+            # Генерируем n-граммы для слова "солнце"
+            sun_word = "солнце"
+            sun_ngrams = []
+            
+            # Биграммы
+            for i in range(len(sun_word)-1):
+                sun_ngrams.append(sun_word[i:i+2])
+                
+            # Триграммы и более длинные n-граммы
+            for i in range(len(sun_word)-2):
+                sun_ngrams.append(sun_word[i:i+3])
+            for i in range(len(sun_word)-3):
+                sun_ngrams.append(sun_word[i:i+4])
+            
+            # Считаем n-граммы слова "солнце" в каждом варианте расшифровки
+            spiral_sun_ngrams = [ng for ng in sun_ngrams if ng in spiral_text.lower()]
+            snake_sun_ngrams = [ng for ng in sun_ngrams if ng in snake_text.lower()]
+            
+            # Проверяем полное слово
+            spiral_has_sun = sun_word in spiral_text.lower()
+            snake_has_sun = sun_word in snake_text.lower()
+            
             # Дешифруем текст с определенным типом маршрута
             decrypted, table = cipher.decrypt(text, width, route_type=route_type)
 
@@ -1372,6 +1405,22 @@ class RouteGUI:
             
             # Сохраняем высоту для последующего сохранения
             self.decrypt_height_var.set(str(height))
+            
+            # Информируем пользователя о определенном типе маршрута с подробностями
+            debug_info = (f"Определен тип маршрута: {route_type}\n\n"
+                         f"Оценка качества текста:\n"
+                         f"Спираль: {spiral_quality:.2f} (лингв: {spiral_linguistic:.2f}, n-граммы: {spiral_ngram:.2f})\n"
+                         f"Популярные биграммы: {', '.join(spiral_bigrams) if spiral_bigrams else 'не найдены'}\n"
+                         f"Популярные триграммы: {', '.join(spiral_trigrams) if spiral_trigrams else 'не найдены'}\n"
+                         f"N-граммы 'солнце': {', '.join(spiral_sun_ngrams) if spiral_sun_ngrams else 'не найдены'}\n"
+                         f"Полное слово 'солнце': {'да' if spiral_has_sun else 'нет'}\n\n"
+                         f"Змейка: {snake_quality:.2f} (лингв: {snake_linguistic:.2f}, n-граммы: {snake_ngram:.2f})\n"
+                         f"Популярные биграммы: {', '.join(snake_bigrams) if snake_bigrams else 'не найдены'}\n"
+                         f"Популярные триграммы: {', '.join(snake_trigrams) if snake_trigrams else 'не найдены'}\n"
+                         f"N-граммы 'солнце': {', '.join(snake_sun_ngrams) if snake_sun_ngrams else 'не найдены'}\n"
+                         f"Полное слово 'солнце': {'да' if snake_has_sun else 'нет'}\n")
+            
+            messagebox.showinfo("Результат криптоанализа", debug_info)
 
         except ValueError as e:
             messagebox.showerror("Ошибка", str(e))
@@ -1379,6 +1428,23 @@ class RouteGUI:
             messagebox.showerror("Ошибка", f"Произошла ошибка при дешифровании: {str(e)}")
             import traceback
             traceback.print_exc()
+
+    def open_file_for_decryption(self):
+        """Открывает файл для дешифрования"""
+        file_path = filedialog.askopenfilename(
+            title="Открыть файл для дешифрования",
+            filetypes=[("Текстовые файлы", "*.txt"), ("Все файлы", "*.*")]
+        )
+
+        if not file_path:
+            return  # Пользователь отменил выбор файла
+
+        content = read_file(file_path)
+        if content is not None:
+            self.decrypt_input_text.delete("1.0", tk.END)
+            self.decrypt_input_text.insert("1.0", content)
+        else:
+            messagebox.showerror("Ошибка", "Не удалось прочитать файл. Проверьте формат и кодировку.")
 
     def save_file_encrypted(self):
         """Сохраняет зашифрованный текст в файл"""
