@@ -784,6 +784,284 @@ class RouteCipher:
                 messagebox.showerror("Ошибка", f"Не удалось сохранить файл: {e}")
 
 
+# Определение класса RouteGUI
+class RouteGUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Маршрутный шифр")
+        
+        # Создаем вкладки
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Вкладка шифрования
+        self.encrypt_frame = ttk.Frame(self.notebook)
+        self.notebook.add(self.encrypt_frame, text="Шифрование")
+        
+        # Вкладка дешифрования
+        self.decrypt_frame = ttk.Frame(self.notebook)
+        self.notebook.add(self.decrypt_frame, text="Дешифрование")
+        
+        # Настраиваем интерфейс
+        self.setup_encrypt_tab()
+        self.setup_decrypt_tab()
+    
+    def setup_encrypt_tab(self):
+        # Фрейм для ввода текста
+        input_frame = ttk.LabelFrame(self.encrypt_frame, text="Исходный текст")
+        input_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Текстовое поле для ввода
+        self.encrypt_input_text = scrolledtext.ScrolledText(input_frame, wrap=tk.WORD, width=60, height=10)
+        self.encrypt_input_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Кнопка загрузки из файла
+        load_btn = ttk.Button(input_frame, text="Загрузить из файла", command=self.open_file_for_encryption)
+        load_btn.pack(anchor=tk.W, padx=5, pady=5)
+        
+        # Фрейм для параметров шифрования
+        params_frame = ttk.LabelFrame(self.encrypt_frame, text="Параметры шифрования")
+        params_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Ширина таблицы
+        width_frame = ttk.Frame(params_frame)
+        width_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        ttk.Label(width_frame, text="Ширина таблицы:").pack(side=tk.LEFT, padx=5)
+        self.encrypt_width_var = tk.StringVar(value="11")
+        width_entry = ttk.Entry(width_frame, textvariable=self.encrypt_width_var, width=5)
+        width_entry.pack(side=tk.LEFT, padx=5)
+        
+        # Тип маршрута
+        route_frame = ttk.Frame(params_frame)
+        route_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        ttk.Label(route_frame, text="Тип маршрута:").pack(side=tk.LEFT, padx=5)
+        self.encrypt_route_var = tk.StringVar(value="спираль")
+        route_combo = ttk.Combobox(route_frame, textvariable=self.encrypt_route_var, values=["спираль", "змейка"], state="readonly", width=10)
+        route_combo.pack(side=tk.LEFT, padx=5)
+        
+        # Кнопка шифрования
+        encrypt_btn = ttk.Button(self.encrypt_frame, text="Зашифровать", command=self.encrypt_text)
+        encrypt_btn.pack(pady=10)
+        
+        # Фрейм для вывода
+        output_frame = ttk.LabelFrame(self.encrypt_frame, text="Зашифрованный текст")
+        output_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Текстовое поле для вывода
+        self.encrypt_output_text = scrolledtext.ScrolledText(output_frame, wrap=tk.WORD, width=60, height=10)
+        self.encrypt_output_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Кнопка сохранения
+        save_btn = ttk.Button(output_frame, text="Сохранить в файл", command=self.save_file_encrypted)
+        save_btn.pack(anchor=tk.E, padx=5, pady=5)
+    
+    def setup_decrypt_tab(self):
+        # Фрейм для ввода текста
+        input_frame = ttk.LabelFrame(self.decrypt_frame, text="Зашифрованный текст")
+        input_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Текстовое поле для ввода
+        self.decrypt_input_text = scrolledtext.ScrolledText(input_frame, wrap=tk.WORD, width=60, height=10)
+        self.decrypt_input_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Кнопка загрузки из файла
+        load_btn = ttk.Button(input_frame, text="Загрузить из файла", command=self.open_file_for_decryption)
+        load_btn.pack(anchor=tk.W, padx=5, pady=5)
+        
+        # Фрейм для параметров дешифрования
+        params_frame = ttk.LabelFrame(self.decrypt_frame, text="Параметры дешифрования")
+        params_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Ширина таблицы
+        width_frame = ttk.Frame(params_frame)
+        width_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        ttk.Label(width_frame, text="Ширина таблицы:").pack(side=tk.LEFT, padx=5)
+        self.decrypt_width_var = tk.StringVar(value="11")
+        width_entry = ttk.Entry(width_frame, textvariable=self.decrypt_width_var, width=5)
+        width_entry.pack(side=tk.LEFT, padx=5)
+        
+        # Тип маршрута (для отображения результата криптоанализа)
+        route_frame = ttk.Frame(params_frame)
+        route_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        ttk.Label(route_frame, text="Тип маршрута:").pack(side=tk.LEFT, padx=5)
+        self.decrypt_route_var = tk.StringVar(value="")
+        route_label = ttk.Label(route_frame, textvariable=self.decrypt_route_var, width=10)
+        route_label.pack(side=tk.LEFT, padx=5)
+        ttk.Label(route_frame, text="(определяется автоматически)").pack(side=tk.LEFT, padx=5)
+        
+        # Скрытые переменные для сохранения данных
+        self.decrypt_height_var = tk.StringVar(value="")
+        
+        # Кнопка дешифрования
+        decrypt_btn = ttk.Button(self.decrypt_frame, text="Расшифровать", command=self.decrypt_text)
+        decrypt_btn.pack(pady=10)
+        
+        # Фрейм для вывода
+        output_frame = ttk.LabelFrame(self.decrypt_frame, text="Расшифрованный текст")
+        output_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Текстовое поле для вывода
+        self.decrypt_output_text = scrolledtext.ScrolledText(output_frame, wrap=tk.WORD, width=60, height=10)
+        self.decrypt_output_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Кнопки для сохранения
+        save_frame = ttk.Frame(output_frame)
+        save_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        save_btn = ttk.Button(save_frame, text="Сохранить текст", command=self.save_file_decrypted)
+        save_btn.pack(side=tk.LEFT, padx=5)
+    
+    def open_file_for_encryption(self):
+        """Открывает файл для шифрования"""
+        file_path = filedialog.askopenfilename(
+            title="Открыть файл для шифрования",
+            filetypes=[("Текстовые файлы", "*.txt"), ("Все файлы", "*.*")]
+        )
+        
+        if not file_path:
+            return  # Пользователь отменил выбор файла
+        
+        content = read_file(file_path)
+        if content is not None:
+            self.encrypt_input_text.delete("1.0", tk.END)
+            self.encrypt_input_text.insert("1.0", content)
+        else:
+            messagebox.showerror("Ошибка", "Не удалось прочитать файл. Проверьте формат и кодировку.")
+    
+    def encrypt_text(self):
+        """Шифрует введенный текст"""
+        # Получаем текст и параметры
+        text = self.encrypt_input_text.get("1.0", tk.END).strip()
+        
+        if not text:
+            messagebox.showerror("Ошибка", "Введите текст для шифрования")
+            return
+        
+        try:
+            width = int(self.encrypt_width_var.get().strip())
+            if width <= 0:
+                messagebox.showerror("Ошибка", "Ширина таблицы должна быть положительным числом")
+                return
+                
+            route_type = self.encrypt_route_var.get()
+            
+            # Создаем объект шифра и шифруем текст
+            cipher = RouteCipher()
+            encrypted, table = cipher.encrypt(text, width, route_type, remove_spaces=False)
+            
+            # Выводим результат
+            self.encrypt_output_text.delete("1.0", tk.END)
+            self.encrypt_output_text.insert("1.0", encrypted)
+            
+        except ValueError as e:
+            messagebox.showerror("Ошибка", str(e))
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Произошла ошибка при шифровании: {str(e)}")
+            import traceback
+            traceback.print_exc()
+    
+    def decrypt_text(self):
+        """Дешифрует введенный текст"""
+        # Берем текст из поля ввода
+        text = self.decrypt_input_text.get("1.0", tk.END).strip()
+
+        if not text:
+            messagebox.showerror("Ошибка", "Введите текст для дешифрования")
+            return
+
+        try:
+            # Ширину таблицы пользователь должен указать сам
+            width_str = self.decrypt_width_var.get().strip()
+            if not width_str:
+                messagebox.showerror("Ошибка", "Введите ширину таблицы для дешифрования")
+                return
+
+            # Переводим в число и считаем высоту исходя из длины текста
+            width = int(width_str)
+            height = (len(text) + width - 1) // width
+            
+            # Создаем наш инструмент дешифровки
+            cipher = RouteCipher()
+
+            # Анализируем и выбираем тип маршрута
+            route_type = cipher.analyze_route_pattern(text, width, height)
+            self.decrypt_route_var.set(route_type)
+            
+            # Дешифруем текст с определенным типом маршрута
+            decrypted, table = cipher.decrypt(text, width, route_type=route_type)
+
+            # Выводим результат
+            self.decrypt_output_text.delete("1.0", tk.END)
+            self.decrypt_output_text.insert("1.0", decrypted)
+            
+            # Сохраняем высоту для последующего сохранения
+            self.decrypt_height_var.set(str(height))
+
+        except ValueError as e:
+            messagebox.showerror("Ошибка", str(e))
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Произошла ошибка при дешифровании: {str(e)}")
+            import traceback
+            traceback.print_exc()
+    
+    def open_file_for_decryption(self):
+        """Открывает файл для дешифрования"""
+        file_path = filedialog.askopenfilename(
+            title="Открыть файл для дешифрования",
+            filetypes=[("Текстовые файлы", "*.txt"), ("Все файлы", "*.*")]
+        )
+        
+        if not file_path:
+            return  # Пользователь отменил выбор файла
+        
+        content = read_file(file_path)
+        if content is not None:
+            self.decrypt_input_text.delete("1.0", tk.END)
+            self.decrypt_input_text.insert("1.0", content)
+        else:
+            messagebox.showerror("Ошибка", "Не удалось прочитать файл. Проверьте формат и кодировку.")
+
+    def save_file_encrypted(self):
+        """Сохраняет зашифрованный текст в файл"""
+        encrypted_text = self.encrypt_output_text.get("1.0", tk.END).strip()
+        if not encrypted_text:
+            messagebox.showerror("Ошибка", "Нет текста для сохранения")
+            return
+            
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".txt",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
+        )
+        
+        if file_path:
+            try:
+                # Сохраняем зашифрованный текст без метаданных
+                write_file(file_path, encrypted_text)
+            except Exception as e:
+                messagebox.showerror("Ошибка", f"Не удалось сохранить файл: {e}")
+
+    def save_file_decrypted(self):
+        """Сохраняет расшифрованный текст в файл"""
+        decrypted_text = self.decrypt_output_text.get("1.0", tk.END).strip()
+        if not decrypted_text:
+            messagebox.showerror("Ошибка", "Нет текста для сохранения")
+            return
+            
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".txt",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
+        )
+        
+        if file_path:
+            try:
+                # Сохраняем только расшифрованный текст
+                write_file(file_path, decrypted_text)
+            except Exception as e:
+                messagebox.showerror("Ошибка", f"Не удалось сохранить файл: {e}")
 
 
 def main():
