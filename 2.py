@@ -60,68 +60,26 @@ class RouteCipher:
         return True
 
     def detect_weather_forecast(self, text):
-
-        # Все к нижнему регистру - иначе замучаемся проверять
+        """Проверка текста на соответствие прогнозу погоды"""
         text_lower = text.lower()
-
-        # Самые частые биграммы в русском - если их нет, значит что-то не так
-        popular_bigrams = ['ст', 'но', 'то', 'на', 'ен', 'ов', 'ни', 'ра', 'во',
-                           'ко', 'ал', 'ли', 'по', 'ре', 'ол', 'пр', 'ть', 'ат',
-                           'ет', 'та', 'го', 'ос', 'ер', 'ит', 'нн', 'ск', 'ны', 'ие']
-
-        # Частые триграммы - тут сложнее, но тоже важно
-        popular_trigrams = ['ост', 'ого', 'ени', 'ста', 'про', 'ная', 'ени', 'что',
-                            'тор', 'ать', 'кот', 'его', 'ном', 'ого', 'ова', 'ств']
-
+        
+        # Ключевое слово для проверки
         sun_word = "солнце"
-        sun_ngrams = []
-
-        # Делаем кусочки из "солнца" разной длины
-        # Короткие куски (по 2 буквы)
-        for i in range(len(sun_word) - 1):
-            sun_ngrams.append(sun_word[i:i + 2])
-
-        # Средние куски (по 3 буквы)
-        for i in range(len(sun_word) - 2):
-            sun_ngrams.append(sun_word[i:i + 3])
-
-        # Большие куски (4 и 5 букв)
-        for i in range(len(sun_word) - 3):
-            sun_ngrams.append(sun_word[i:i + 4])
-        for i in range(len(sun_word) - 4):
-            sun_ngrams.append(sun_word[i:i + 5])
-
-        # Считаем сколько обычных биграмм попалось в тексте
-        bigram_score = 0
-        for bigram in popular_bigrams:
-            count = text_lower.count(bigram)
-            bigram_score += count
-
-        total_chars = max(1, len(text_lower) - 1)
-        bigram_ratio = min(1.0, bigram_score / (total_chars * 1))
-
-        trigram_score = 0
-        for trigram in popular_trigrams:
-            count = text_lower.count(trigram)
-            trigram_score += count * 1
-
-        trigram_ratio = min(1.0, trigram_score / (total_chars * 1))
-
-        # Считаем куски "солнца" - чем длиннее кусок, тем он ценнее
-        sun_score = 0
-        for ngram in sun_ngrams:
-            ngram_count = text_lower.count(ngram)
-            if ngram_count > 0:
-                # Длинный кусок - большой куш
-                sun_score += ngram_count * (len(ngram) / 1)
-
-        if sun_word in text_lower:
-            sun_score += 1.0
-
-        sun_score = min(1.0, sun_score / 1)
-
-        final_score = bigram_ratio * 1 + trigram_ratio * 1 + sun_score * 1
-
+        
+        # Считаем вхождения ключевого слова
+        sun_score = text_lower.count(sun_word) * 0.5
+        
+        # Подсчет пробелов и знаков препинания
+        space_ratio = text.count(' ') / max(1, len(text))
+        punct_ratio = sum(1 for c in text if c in '.,:;!?') / max(1, len(text))
+        
+        # Нормализованные оценки
+        space_score = 1.0 - abs(0.18 - space_ratio) if 0.1 <= space_ratio <= 0.3 else 0.0
+        punct_score = 1.0 - abs(0.07 - punct_ratio) * 10 if punct_ratio > 0 else 0.0
+        
+        # Итоговая оценка
+        final_score = (sun_score + space_score + punct_score) / 3
+        
         return min(1.0, final_score)
 
     def pad_text(self, text, width, height):
@@ -196,147 +154,46 @@ class RouteCipher:
         return route
 
     def analyze_route_pattern(self, text, width, height):
-        """
-        Анализирует текст и определяет оптимальный тип маршрута (спираль или змейка).
-        Анализ основан на частотных N-граммах русского языка и
-        наличии слова "солнце" и его фрагментов.
-
-        Параметры:
-        - text: текст для анализа
-        - width: ширина таблицы
-        - height: высота таблицы
-
-        Возвращает:
-        - "спираль" или "змейка" в зависимости от результатов анализа
-        """
-        # Проверяем, что нам дали нормальные параметры
-        if not text or width <= 0 or height <= 0:
-            return "спираль"  # По умолчанию, если входные данные - ерунда
-
-        # Если текст слишком короткий - тоже берем спираль, так надежнее
-        if len(text) < width * 2:
-            return "спираль"
-
-            # Создаем два маршрута - змейкой и спиралью
+        """Определение типа маршрута путем анализа качества расшифровки"""
+        # Создаем матрицу нужного размера
+        matrix = [[None for _ in range(width)] for _ in range(height)]
+        
+        # Заполняем матрицу текстом
+        for i, char in enumerate(text):
+            if i < width * height:
+                row = i // width
+                col = i % width
+                matrix[row][col] = char
+        
+        # Генерируем маршруты
         spiral_route = self.spiral_route(width, height)
         snake_route = self.snake_route(width, height)
-
-        # Делаем пустые матрицы для обоих вариантов
+        
+        # Создаем две новые матрицы, заполненные по этим маршрутам
         spiral_matrix = [[' ' for _ in range(width)] for _ in range(height)]
         snake_matrix = [[' ' for _ in range(width)] for _ in range(height)]
-
-        # Обрезаем текст, если он вдруг слишком длинный
-        text_normalized = text[:min(len(text), len(spiral_route))]
-
-        # Заполняем матрицы - каждая буква на свое место
-        for idx, char in enumerate(text_normalized):
-            if idx < len(spiral_route):
-                i, j = spiral_route[idx]
-                if 0 <= i < height and 0 <= j < width:
-                    spiral_matrix[i][j] = char
-
-            if idx < len(snake_route):
-                i, j = snake_route[idx]
-                if 0 <= i < height and 0 <= j < width:
-                    snake_matrix[i][j] = char
-
-        # Читаем матрицы построчно - получаем два разных текста
+        
+        for i, char in enumerate(text):
+            if i < len(spiral_route):
+                x, y = spiral_route[i]
+                if 0 <= x < height and 0 <= y < width:
+                    spiral_matrix[x][y] = char
+            
+            if i < len(snake_route):
+                x, y = snake_route[i]
+                if 0 <= x < height and 0 <= y < width:
+                    snake_matrix[x][y] = char
+        
+        # Читаем текст из матриц построчно
         spiral_text = ''.join(''.join(row) for row in spiral_matrix)
         snake_text = ''.join(''.join(row) for row in snake_matrix)
-
-
+        
+        # Оцениваем качество текста
         spiral_quality = self.assess_decryption_quality(spiral_text)
         snake_quality = self.assess_decryption_quality(snake_text)
-
-
-        spiral_linguistic = self.secondary_quality_check(spiral_text)
-        snake_linguistic = self.secondary_quality_check(snake_text)
-
-
-        spiral_ngram_score = self.detect_weather_forecast(spiral_text)
-        snake_ngram_score = self.detect_weather_forecast(snake_text)
-
-        # Специально ищем солнце и его части - это наш ключ
-        sun_word = "солнце"
-        sun_ngrams = []
-
-        # Собираем все возможные куски слова "солнце"
-        # Маленькие (по 2)
-        for i in range(len(sun_word) - 1):
-            sun_ngrams.append(sun_word[i:i + 2])
-
-        # Средние (по 3)
-        for i in range(len(sun_word) - 2):
-            sun_ngrams.append(sun_word[i:i + 3])
-
-        # Большие (4 и 5)
-        for i in range(len(sun_word) - 3):
-            sun_ngrams.append(sun_word[i:i + 4])
-        for i in range(len(sun_word) - 4):
-            sun_ngrams.append(sun_word[i:i + 5])
-
-        # Считаем сколько кусков нашлось в каждом варианте расшифровки
-        spiral_sun_count = sum(spiral_text.lower().count(ng) for ng in sun_ngrams)
-        snake_sun_count = sum(snake_text.lower().count(ng) for ng in sun_ngrams)
-
-        # Проверяем, нашлось ли целое слово
-        spiral_has_full_sun = sun_word in spiral_text.lower()
-        snake_has_full_sun = sun_word in snake_text.lower()
-
-        # Бонусы для вариантов
-        spiral_sun_bonus = 0
-        snake_sun_bonus = 0
-
-        # Если есть полное слово "солнце"
-        if spiral_has_full_sun:
-            spiral_sun_bonus += 1
-        if snake_has_full_sun:
-            snake_sun_bonus += 1
-
-        # Если больше фрагментов слова "солнце"
-        if spiral_sun_count > snake_sun_count * 1:
-            spiral_sun_bonus += 0.5
-        elif snake_sun_count > spiral_sun_count * 1:
-            snake_sun_bonus += 1.5
-
-        # Вычисляем общую оценку с весами
-        # Баланс между общим качеством и специфическими проверками
-        spiral_score = (spiral_quality * 1 +
-                        spiral_linguistic * 1 +
-                        spiral_ngram_score * 1 +
-                        spiral_sun_bonus)
-
-        snake_score = (snake_quality * 1 +
-                       snake_linguistic * 1 +
-                       snake_ngram_score * 1 +
-                       snake_sun_bonus)
-
-        # Применяем корректировки на основе формы таблицы
-
-        # 1. Для квадратных таблиц предпочтительнее спираль
-        if abs(width - height) <= 2:
-            spiral_score *= 1
-
-        # 2. Для очень широких таблиц предпочтительнее змейка
-        if width > height * 2:
-            snake_score *= 1
-
-        # 3. Для очень высоких таблиц тоже предпочтительнее змейка
-        if height > width * 2:
-            snake_score *= 1
-
-
-        # Бонус, если в одном варианте есть слово "солнце" или много его фрагментов
-        if (spiral_has_full_sun or spiral_sun_count >= 7) and not (snake_has_full_sun or snake_sun_count >= 7):
-            spiral_score *= 1
-        elif (snake_has_full_sun or snake_sun_count >= 7) and not (spiral_has_full_sun or spiral_sun_count >= 7):
-            snake_score *= 1
-
-        # Возвращаем тип маршрута с наивысшей оценкой
-        if snake_score > spiral_score:
-            return "змейка"
-        else:
-            return "спираль"
+        
+        # Возвращаем тип маршрута с лучшей оценкой
+        return "спираль" if spiral_quality > snake_quality else "змейка"
 
     def get_route(self, width, height, route_type):
         """Возвращает маршрут указанного типа для таблицы заданного размера"""
@@ -466,51 +323,18 @@ class RouteCipher:
         return fillers
 
     def assess_decryption_quality(self, text):
-        """Усовершенствованная оценка качества расшифровки с учетом прогноза погоды"""
-        # Используем только первые 1000 символов для анализа (достаточная выборка)
+        """Оценка качества расшифровки"""
+        # Используем только первые 1000 символов для анализа
         sample = text[:1000] if len(text) > 1000 else text
 
         if not sample:
             return 0.0
 
-        # 1. Подсчет русских букв и знаков препинания
-        russian_chars = sum(1 for c in sample if c.lower() in 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя')
-        russian_ratio = russian_chars / len(sample) if sample else 0
-
-        # Базовая проверка на русский текст - если меньше 30% русских букв, вероятно это не русский текст
-        if russian_ratio < 1:
-            return russian_ratio * 1  # Возвращаем низкую оценку
-
-        # 2. Подсчет пробелов (нормальное соотношение ~15-20%)
+        # Подсчет пробелов (нормальное соотношение ~15-20%)
         space_ratio = sample.count(' ') / len(sample) if sample else 0
-        space_score = 1.0 - 1 * abs(0.18 - space_ratio) if space_ratio > 0 else 0.0
+        space_score = 1.0 - abs(0.18 - space_ratio) if space_ratio > 0 else 0.0
 
-        # Если пробелов слишком мало или слишком много, это плохой признак
-        if space_ratio < 1 or space_ratio > 1:
-            space_score = space_score / 1
-
-        # 3. Анализ частотных биграмм в русском языке
-        common_bigrams = ['ст', 'но', 'то', 'на', 'ен', 'ов', 'ни', 'ра', 'во', 'ко', 'ал', 'ли', 'по', 'ре', 'ол',
-                          'пр', 'ть', 'ат', 'ет', 'та', 'го', 'ос', 'ер', 'ит', 'нн', 'ск', 'ны', 'ие']
-        sample_lower = sample.lower()
-        bigram_count = 0
-
-        for bigram in common_bigrams:
-            bigram_count += sample_lower.count(bigram)
-
-        # Нормализуем на длину текста и количество проверяемых биграмм
-        bigram_ratio = bigram_count / max(1, len(sample) - 1) * (1 / len(common_bigrams))
-
-        # 4. Анализ знаков препинания и их позиций
-        punct_marks = '.,:;!?'
-        punct_count = sum(1 for c in sample if c in punct_marks)
-        punct_ratio = punct_count / len(sample) if sample else 0
-
-        # Оптимальное соотношение знаков препинания ~5-10%
-        punct_score = 1.0 - abs(0.07 - punct_ratio) * 1 if punct_ratio > 0 else 0.0
-        punct_score = max(0.0, min(1.0, punct_score))
-
-        # 5. Проверка начала предложений (с заглавной буквы после точки)
+        # Проверка начала предложений (с заглавной буквы после точки)
         valid_caps = 0
         total_sentences = 0
 
@@ -522,50 +346,26 @@ class RouteCipher:
 
         caps_score = valid_caps / max(1, total_sentences)
 
-        # 6. Анализ соотношения гласных и согласных
-        vowels = 'аеёиоуыэюя'
-        consonants = 'бвгджзйклмнпрстфхцчшщ'
-
-        vowel_count = sum(1 for c in sample_lower if c in vowels)
-        consonant_count = sum(1 for c in sample_lower if c in consonants)
-
-        # Нормальное соотношение для русского языка: ~42% гласных, ~58% согласных
-        if vowel_count + consonant_count > 0:
-            vowel_ratio = vowel_count / (vowel_count + consonant_count)
-            vowel_consonant_score = 1.0 - abs(0.42 - vowel_ratio) * 1
-            vowel_consonant_score = max(0.0, min(1.0, vowel_consonant_score))
-        else:
-            vowel_consonant_score = 0.0
-
-        # 7. Анализ длин слов
+        # Анализ длин слов
         words = [w for w in sample.split() if w]
 
         if words:
-            # Средняя длина слова в русском языке ~5.5 символов
+            # Средняя длина слова ~5.5 символов
             avg_word_length = sum(len(w) for w in words) / len(words)
-            word_length_score = 1.0 - abs(5.5 - avg_word_length) / 1
+            word_length_score = 1.0 - abs(5.5 - avg_word_length) / 5.0
             word_length_score = max(0.0, min(1.0, word_length_score))
-
-            # Проверка наличия очень длинных слов (потенциально слипшихся)
-            long_words_ratio = sum(1 for w in words if len(w) > 1) / len(words)
-            if long_words_ratio > 1:  # Если более 10% слов длиннее 15 символов, снижаем оценку
-                word_length_score *= (1.0 - long_words_ratio)
         else:
             word_length_score = 0.0
-
-        # 8. НОВОЕ: Специальный анализ на соответствие прогнозу погоды
+            
+        # Специальный анализ на соответствие прогнозу погоды
         weather_score = self.detect_weather_forecast(sample)
 
-        # Объединяем все метрики в общую оценку с различными весами
+        # Объединяем все метрики в общую оценку
         quality = (
-                russian_ratio * 1 +  # Вес соотношения русских букв
-                space_score * 1 +  # Вес правильного соотношения пробелов
-                bigram_ratio * 1 +  # Вес частотных биграмм
-                punct_score * 1 +  # Вес знаков препинания
-                caps_score * 1 +  # Вес правильного начала предложений
-                vowel_consonant_score * 1 +  # Вес соотношения гласных и согласных
-                word_length_score * 1 +  # Вес средней длины слов
-                weather_score * 1  # Вес соответствия прогнозу погоды
+                space_score * 0.25 +
+                caps_score * 0.25 +
+                word_length_score * 0.25 +
+                weather_score * 0.25
         )
 
         return min(1.0, max(0.0, quality))
@@ -743,99 +543,38 @@ class RouteCipher:
             return 1  # Возвращаем базовую оценку в случае ошибки
 
     def secondary_quality_check(self, text):
-        """Дополнительная проверка качества расшифровки, фокусирующаяся на лингвистическом анализе"""
-        # Берем первую тысячу символов - чего там всё читать-то
+        """Дополнительная проверка качества расшифровки"""
+        # Берем первую тысячу символов
         sample = text[:1000] if len(text) > 1000 else text
 
         if not sample or len(sample) < 10:
             return 0.0  # Пустой текст - нулевая оценка
 
-        # 1. Подсчет слов, соответствующих русскому языку (имеют гласные)
+        # Подсчет слов
         words = [w for w in sample.split() if len(w) > 1]
 
         if not words:
             return 0.0  # Нет слов - плохо дело
 
-        # Анализ слов на признаки русского языка
-        vowels = 'аеёиоуыэюя'  # Русские гласные
-        valid_words_count = 0
-
-        for word in words:
-            # В русском слове ОБЯЗАТЕЛЬНО должна быть хоть одна гласная
-            has_vowels = any(c.lower() in vowels for c in word)
-
-            # А еще в русском нет кучи согласных подряд (ну, больше 4х точно редкость)
-            consonants = 'бвгджзйклмнпрстфхцчшщ'
-            consecutive_consonants = 0
-            max_consecutive_consonants = 0
-
-            for char in word.lower():
-                if char in consonants:
-                    consecutive_consonants += 1
-                    max_consecutive_consonants = max(max_consecutive_consonants, consecutive_consonants)
-                else:
-                    consecutive_consonants = 0
-
-            # Если слово проходит обе проверки - считаем его правильным
-            if has_vowels and max_consecutive_consonants <= 4:
-                valid_words_count += 1
-
-        # 2. Проверка типичных окончаний русских слов - они часто повторяются
-        common_endings = ['ть', 'го', 'ый', 'ая', 'ое', 'ие', 'ся', 'ом', 'ем', 'ам', 'ах', 'ям']
-        endings_count = 0
-
-        for word in words:
-            word_lower = word.lower()
-            if len(word_lower) > 2 and any(word_lower.endswith(ending) for ending in common_endings):
-                endings_count += 1
-
-        # 3. А без предлогов и союзов русский текст не бывает вообще
-        common_small_words = ['в', 'на', 'с', 'к', 'у', 'от', 'до', 'из', 'о', 'и', 'а', 'но', 'или', 'как', 'что',
-                              'не']
-        small_words_count = sum(1 for w in words if w.lower() in common_small_words)
-
-        # 4. Еще можно проверить, есть ли правильное чередование в тексте
-        # Например, после предлога должно идти существительное или местоимение
-        sequence_score = 0
-
-        for i in range(len(words) - 1):
-            if words[i].lower() in ['в', 'на', 'с', 'к', 'у', 'от', 'до', 'из', 'о']:
-                # Если после предлога слово длиннее 2х букв - норм признак
-                if len(words[i + 1]) > 2:
-                    sequence_score += 1
-
-        # 5. Структура предложений тоже важна - ищем начала с большой буквы и т.д.
+        # Структура предложений - ищем начала с большой буквы и т.д.
         sentences = re.split(r'[.!?]+', sample)
         sentences = [s.strip() for s in sentences if s.strip()]
 
         sentence_structure_score = 0
         for sentence in sentences:
-            # С большой буквы? Молодец!
+            # С большой буквы?
             if sentence and sentence[0].isupper():
                 sentence_structure_score += 1
 
-            # Достаточно длинное? Тоже хорошо
+            # Достаточно длинное?
             words_in_sentence = sentence.split()
             if len(words_in_sentence) >= 3:  # Меньше 3х слов - так себе предложение
                 sentence_structure_score += 1
 
-        # Теперь считаем итоговые оценки по разным параметрам
-        word_validity_score = valid_words_count / max(1, len(words))
-        ending_score = endings_count / max(1, len(words))
-        small_words_score = small_words_count / max(1, len(words) * 1)  # Обычно ~30% маленьких слов
-        seq_score_norm = sequence_score / max(1, len(words) / 1)  # Примерно каждое 5е слово - предлог
-        sentence_score = sentence_structure_score / max(1, len(sentences) * 1)  # 2 критерия на предложение
+        # Итоговая оценка
+        sentence_score = sentence_structure_score / max(1, len(sentences) * 2)  # 2 критерия на предложение
 
-        # Смешиваем всё вместе в правильных пропорциях
-        quality = (
-                word_validity_score * 1 +
-                ending_score * 1 +
-                min(1.0, small_words_score) * 1 +
-                min(1.0, seq_score_norm) * 1 +
-                min(1.0, sentence_score) * 1
-        )
-
-        return min(1.0, quality)
+        return min(1.0, sentence_score)
 
     
 
@@ -988,358 +727,6 @@ class RouteCipher:
             metadata['route_type'] = route_info.group(1)
 
         return metadata
-
-    def open_file_for_decryption(self):
-        """Открывает файл для дешифрования"""
-        file_path = filedialog.askopenfilename(
-            title="Открыть файл для дешифрования",
-            filetypes=[("Текстовые файлы", "*.txt"), ("Все файлы", "*.*")]
-        )
-
-        if not file_path:
-            return  # Пользователь отменил выбор файла
-
-        content = read_file(file_path)
-        if content is not None:
-            self.decrypt_input_text.delete("1.0", tk.END)
-            self.decrypt_input_text.insert("1.0", content)
-        else:
-            messagebox.showerror("Ошибка", "Не удалось прочитать файл. Проверьте формат и кодировку.")
-
-    def save_file_encrypted(self):
-        """Сохраняет зашифрованный текст в файл"""
-        encrypted_text = self.encrypt_output_text.get("1.0", tk.END).strip()
-        if not encrypted_text:
-            messagebox.showerror("Ошибка", "Нет текста для сохранения")
-            return
-
-        file_path = filedialog.asksaveasfilename(
-            defaultextension=".txt",
-            filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
-        )
-
-        if file_path:
-            try:
-                # Сохраняем зашифрованный текст без метаданных
-                write_file(file_path, encrypted_text)
-            except Exception as e:
-                messagebox.showerror("Ошибка", f"Не удалось сохранить файл: {e}")
-
-    def save_file_decrypted(self):
-        """Сохраняет расшифрованный текст в файл"""
-        decrypted_text = self.decrypt_output_text.get("1.0", tk.END).strip()
-        if not decrypted_text:
-            messagebox.showerror("Ошибка", "Нет текста для сохранения")
-            return
-
-        file_path = filedialog.asksaveasfilename(
-            defaultextension=".txt",
-            filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
-        )
-
-        if file_path:
-            try:
-                # Сохраняем только расшифрованный текст
-                write_file(file_path, decrypted_text)
-            except Exception as e:
-                messagebox.showerror("Ошибка", f"Не удалось сохранить файл: {e}")
-
-
-# Определение класса RouteGUI
-class RouteGUI:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Маршрутный шифр")
-
-        # Создаем вкладки
-        self.notebook = ttk.Notebook(self.root)
-        self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-
-        # Вкладка шифрования
-        self.encrypt_frame = ttk.Frame(self.notebook)
-        self.notebook.add(self.encrypt_frame, text="Шифрование")
-
-        # Вкладка дешифрования
-        self.decrypt_frame = ttk.Frame(self.notebook)
-        self.notebook.add(self.decrypt_frame, text="Дешифрование")
-
-        # Настраиваем интерфейс
-        self.setup_encrypt_tab()
-        self.setup_decrypt_tab()
-
-    def setup_encrypt_tab(self):
-        # Фрейм для ввода текста
-        input_frame = ttk.LabelFrame(self.encrypt_frame, text="Исходный текст")
-        input_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-        # Текстовое поле для ввода
-        self.encrypt_input_text = scrolledtext.ScrolledText(input_frame, wrap=tk.WORD, width=60, height=10)
-        self.encrypt_input_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-        # Кнопка загрузки из файла
-        load_btn = ttk.Button(input_frame, text="Загрузить из файла", command=self.open_file_for_encryption)
-        load_btn.pack(anchor=tk.W, padx=5, pady=5)
-
-        # Фрейм для параметров шифрования
-        params_frame = ttk.LabelFrame(self.encrypt_frame, text="Параметры шифрования")
-        params_frame.pack(fill=tk.X, padx=5, pady=5)
-
-        # Ширина таблицы
-        width_frame = ttk.Frame(params_frame)
-        width_frame.pack(fill=tk.X, padx=5, pady=5)
-
-        ttk.Label(width_frame, text="Ширина таблицы:").pack(side=tk.LEFT, padx=5)
-        self.encrypt_width_var = tk.StringVar(value="11")
-        width_entry = ttk.Entry(width_frame, textvariable=self.encrypt_width_var, width=5)
-        width_entry.pack(side=tk.LEFT, padx=5)
-
-        # Тип маршрута
-        route_frame = ttk.Frame(params_frame)
-        route_frame.pack(fill=tk.X, padx=5, pady=5)
-
-        ttk.Label(route_frame, text="Тип маршрута:").pack(side=tk.LEFT, padx=5)
-        self.encrypt_route_var = tk.StringVar(value="спираль")
-        route_combo = ttk.Combobox(route_frame, textvariable=self.encrypt_route_var, values=["спираль", "змейка"],
-                                   state="readonly", width=10)
-        route_combo.pack(side=tk.LEFT, padx=5)
-
-        # Кнопка шифрования
-        encrypt_btn = ttk.Button(self.encrypt_frame, text="Зашифровать", command=self.encrypt_text)
-        encrypt_btn.pack(pady=10)
-
-        # Фрейм для вывода
-        output_frame = ttk.LabelFrame(self.encrypt_frame, text="Зашифрованный текст")
-        output_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-        # Текстовое поле для вывода
-        self.encrypt_output_text = scrolledtext.ScrolledText(output_frame, wrap=tk.WORD, width=60, height=10)
-        self.encrypt_output_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-        # Кнопка сохранения
-        save_btn = ttk.Button(output_frame, text="Сохранить в файл", command=self.save_file_encrypted)
-        save_btn.pack(anchor=tk.E, padx=5, pady=5)
-
-    def setup_decrypt_tab(self):
-        # Фрейм для ввода текста
-        input_frame = ttk.LabelFrame(self.decrypt_frame, text="Зашифрованный текст")
-        input_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-        # Текстовое поле для ввода
-        self.decrypt_input_text = scrolledtext.ScrolledText(input_frame, wrap=tk.WORD, width=60, height=10)
-        self.decrypt_input_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-        # Кнопка загрузки из файла
-        load_btn = ttk.Button(input_frame, text="Загрузить из файла", command=self.open_file_for_decryption)
-        load_btn.pack(anchor=tk.W, padx=5, pady=5)
-
-        # Фрейм для параметров дешифрования
-        params_frame = ttk.LabelFrame(self.decrypt_frame, text="Параметры дешифрования")
-        params_frame.pack(fill=tk.X, padx=5, pady=5)
-
-        # Ширина таблицы
-        width_frame = ttk.Frame(params_frame)
-        width_frame.pack(fill=tk.X, padx=5, pady=5)
-
-        ttk.Label(width_frame, text="Ширина таблицы:").pack(side=tk.LEFT, padx=5)
-        self.decrypt_width_var = tk.StringVar(value="11")
-        width_entry = ttk.Entry(width_frame, textvariable=self.decrypt_width_var, width=5)
-        width_entry.pack(side=tk.LEFT, padx=5)
-
-        # Тип маршрута (для отображения результата криптоанализа)
-        route_frame = ttk.Frame(params_frame)
-        route_frame.pack(fill=tk.X, padx=5, pady=5)
-
-        ttk.Label(route_frame, text="Тип маршрута:").pack(side=tk.LEFT, padx=5)
-        self.decrypt_route_var = tk.StringVar(value="")
-        route_label = ttk.Label(route_frame, textvariable=self.decrypt_route_var, width=10)
-        route_label.pack(side=tk.LEFT, padx=5)
-        ttk.Label(route_frame, text="(определяется автоматически)").pack(side=tk.LEFT, padx=5)
-
-        # Скрытые переменные для сохранения данных
-        self.decrypt_height_var = tk.StringVar(value="")
-
-        # Кнопка дешифрования
-        decrypt_btn = ttk.Button(self.decrypt_frame, text="Расшифровать", command=self.decrypt_text)
-        decrypt_btn.pack(pady=10)
-
-        # Фрейм для вывода
-        output_frame = ttk.LabelFrame(self.decrypt_frame, text="Расшифрованный текст")
-        output_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-        # Текстовое поле для вывода
-        self.decrypt_output_text = scrolledtext.ScrolledText(output_frame, wrap=tk.WORD, width=60, height=10)
-        self.decrypt_output_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-        # Кнопки для сохранения
-        save_frame = ttk.Frame(output_frame)
-        save_frame.pack(fill=tk.X, padx=5, pady=5)
-
-        save_btn = ttk.Button(save_frame, text="Сохранить текст", command=self.save_file_decrypted)
-        save_btn.pack(side=tk.LEFT, padx=5)
-
-    def open_file_for_encryption(self):
-        """Открывает файл для шифрования"""
-        file_path = filedialog.askopenfilename(
-            title="Открыть файл для шифрования",
-            filetypes=[("Текстовые файлы", "*.txt"), ("Все файлы", "*.*")]
-        )
-
-        if not file_path:
-            return  # Пользователь отменил выбор файла
-
-        content = read_file(file_path)
-        if content is not None:
-            self.encrypt_input_text.delete("1.0", tk.END)
-            self.encrypt_input_text.insert("1.0", content)
-        else:
-            messagebox.showerror("Ошибка", "Не удалось прочитать файл. Проверьте формат и кодировку.")
-
-    def encrypt_text(self):
-        """Шифрует введенный текст"""
-        # Получаем текст и параметры
-        text = self.encrypt_input_text.get("1.0", tk.END).strip()
-
-        if not text:
-            messagebox.showerror("Ошибка", "Введите текст для шифрования")
-            return
-
-        try:
-            width = int(self.encrypt_width_var.get().strip())
-            if width <= 0:
-                messagebox.showerror("Ошибка", "Ширина таблицы должна быть положительным числом")
-                return
-
-            route_type = self.encrypt_route_var.get()
-
-            # Создаем объект шифра и шифруем текст
-            cipher = RouteCipher()
-            encrypted, table = cipher.encrypt(text, width, route_type, remove_spaces=False)
-
-            # Выводим результат
-            self.encrypt_output_text.delete("1.0", tk.END)
-            self.encrypt_output_text.insert("1.0", encrypted)
-
-        except ValueError as e:
-            messagebox.showerror("Ошибка", str(e))
-        except Exception as e:
-            messagebox.showerror("Ошибка", f"Произошла ошибка при шифровании: {str(e)}")
-            import traceback
-            traceback.print_exc()
-
-    def decrypt_text(self):
-        """Дешифрует введенный текст"""
-        # Берем текст из поля ввода
-        text = self.decrypt_input_text.get("1.0", tk.END).strip()
-
-        if not text:
-            messagebox.showerror("Ошибка", "Введите текст для дешифрования")
-            return
-
-        try:
-            # Ширину таблицы пользователь должен указать сам
-            width_str = self.decrypt_width_var.get().strip()
-            if not width_str:
-                messagebox.showerror("Ошибка", "Введите ширину таблицы для дешифрования")
-                return
-
-            # Переводим в число и считаем высоту исходя из длины текста
-            width = int(width_str)
-            height = (len(text) + width - 1) // width
-
-            # Создаем инструмент дешифровки
-            cipher = RouteCipher()
-
-            # Анализируем и выбираем тип маршрута
-            route_type = cipher.analyze_route_pattern(text, width, height)
-            self.decrypt_route_var.set(route_type)
-
-            # Теперь делаем два варианта - спиралькой и змейкой, чтобы сравнить
-            spiral_route = cipher.spiral_route(width, height)
-            snake_route = cipher.snake_route(width, height)
-
-            # Пустые матрицы для заполнения
-            spiral_matrix = [[' ' for _ in range(width)] for _ in range(height)]
-            snake_matrix = [[' ' for _ in range(width)] for _ in range(height)]
-
-            # Заполняем матрицы буквами из шифротекста
-            for i, char in enumerate(text):
-                # Спиральный вариант
-                if i < len(spiral_route):
-                    x, y = spiral_route[i]
-                    if 0 <= x < height and 0 <= y < width:
-                        spiral_matrix[x][y] = char
-
-                # Змеиный вариант
-                if i < len(snake_route):
-                    x, y = snake_route[i]
-                    if 0 <= x < height and 0 <= y < width:
-                        snake_matrix[x][y] = char
-
-            # Склеиваем все строки в единый текст
-            spiral_text = ''.join(''.join(row) for row in spiral_matrix)
-            snake_text = ''.join(''.join(row) for row in snake_matrix)
-
-            # Проверяем качество текстов - какой больше похож на нормальный
-            spiral_quality = cipher.assess_decryption_quality(spiral_text)
-            snake_quality = cipher.assess_decryption_quality(snake_text)
-
-            # Еще одна проверка - лингвистический анализ
-            spiral_linguistic = cipher.secondary_quality_check(spiral_text)
-            snake_linguistic = cipher.secondary_quality_check(snake_text)
-
-            # И проверка на распространенные n-граммы
-            spiral_ngram = cipher.detect_weather_forecast(spiral_text)
-            snake_ngram = cipher.detect_weather_forecast(snake_text)
-
-            # Список частых биграмм и триграмм для демонстрации
-            popular_bigrams = ['ст', 'но', 'то', 'на', 'ен', 'ов', 'ни', 'ра', 'во']
-            popular_trigrams = ['ост', 'ого', 'ени', 'ста', 'про', 'ная']
-
-            # Считаем популярные n-граммы в каждом варианте
-            spiral_bigrams = [bg for bg in popular_bigrams if bg in spiral_text.lower()]
-            snake_bigrams = [bg for bg in popular_bigrams if bg in snake_text.lower()]
-
-            spiral_trigrams = [tg for tg in popular_trigrams if tg in spiral_text.lower()]
-            snake_trigrams = [tg for tg in popular_trigrams if tg in snake_text.lower()]
-
-            # Генерируем n-граммы для слова "солнце"
-            sun_word = "солнце"
-            sun_ngrams = []
-
-            # Биграммы
-            for i in range(len(sun_word) - 1):
-                sun_ngrams.append(sun_word[i:i + 2])
-
-            # Триграммы и более длинные n-граммы
-            for i in range(len(sun_word) - 2):
-                sun_ngrams.append(sun_word[i:i + 3])
-            for i in range(len(sun_word) - 3):
-                sun_ngrams.append(sun_word[i:i + 4])
-
-            # Считаем n-граммы слова "солнце" в каждом варианте расшифровки
-            spiral_sun_ngrams = [ng for ng in sun_ngrams if ng in spiral_text.lower()]
-            snake_sun_ngrams = [ng for ng in sun_ngrams if ng in snake_text.lower()]
-
-            # Проверяем полное слово
-            spiral_has_sun = sun_word in spiral_text.lower()
-            snake_has_sun = sun_word in snake_text.lower()
-
-            # Дешифруем текст с определенным типом маршрута
-            decrypted, table = cipher.decrypt(text, width, route_type=route_type)
-
-            # Выводим результат
-            self.decrypt_output_text.delete("1.0", tk.END)
-            self.decrypt_output_text.insert("1.0", decrypted)
-
-            # Сохраняем высоту для последующего сохранения
-            self.decrypt_height_var.set(str(height))
-
-        except ValueError as e:
-            messagebox.showerror("Ошибка", str(e))
-        except Exception as e:
-            messagebox.showerror("Ошибка", f"Произошла ошибка при дешифровании: {str(e)}")
-            import traceback
-            traceback.print_exc()
 
     def open_file_for_decryption(self):
         """Открывает файл для дешифрования"""
